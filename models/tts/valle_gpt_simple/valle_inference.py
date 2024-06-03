@@ -25,7 +25,7 @@ class ValleInference(torch.nn.Module):
         else:
             try:
                 from huggingface_hub import hf_hub_download
-                self.ar_model.load_state_dict(torch.load(hf_hub_download('jiaqili3/vallex', 'valle_ar_mls_encodec.bin'), map_location='cpu'))
+                self.ar_model.load_state_dict(torch.load(hf_hub_download('jiaqili3/vallex', 'valle_ar_mls_encodec.bin'), endpoint='https://hf-mirror.com', map_location='cpu'))
                 # or load from your local path
                 # self.ar_model.load_state_dict(torch.load('/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls/checkpoint/epoch-0005_step-0406000_loss-2.203645/valle_ar_mls_encodec.bin'))
             except Exception as e:
@@ -97,7 +97,7 @@ class ValleInference(torch.nn.Module):
             for chunk in chunks:
                 ar_vq_ids = self.ar_model.sample_hf(
                     batch['phone_ids'],
-                    vq_id[0, :, :225],
+                    vq_id[0, :, :],
                     top_p=chunk['top_p'],
                     top_k=chunk['top_k'],
                     temperature=chunk['temperature'],
@@ -110,7 +110,7 @@ class ValleInference(torch.nn.Module):
 
                 nar_vq_ids = self.nar_model.sample_hf(
                     phone_ids=batch['phone_ids'],
-                    prompt_ids=vq_id[:,:,:225],
+                    prompt_ids=vq_id[:,:,:],
                     first_stage_ids=ar_vq_ids,
                     top_p=1.0,
                     top_k=40,
@@ -118,7 +118,7 @@ class ValleInference(torch.nn.Module):
                 )
 
                 if return_prompt:
-                    nar_vq_ids = torch.cat([vq_id[..., :225], nar_vq_ids], dim=-1)
+                    nar_vq_ids = torch.cat([vq_id[..., :], nar_vq_ids], dim=-1)
 
                 recovered_audio = self.decode(nar_vq_ids)
                 return recovered_audio

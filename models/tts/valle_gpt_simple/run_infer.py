@@ -7,9 +7,10 @@ import os
 import torchaudio
 import re
 import numpy as np
+import shutil
 
-test_wer=False
-test_sim=False
+test_wer=True
+test_sim=True
 test_fid=False
 
 class WER:
@@ -26,12 +27,12 @@ class WER:
         self.model = self.model.to("cuda")
 
     def calc(self, transcript_text, target_text):
-        transcript_text = transcript_text.upper()
+        transcript_text = transcript_text.lower()
         transcript_text = re.sub(r"[^\w\s]", "", transcript_text)
         transcript_text = re.sub(r"\s+", " ", transcript_text)
         transcript_text = transcript_text.strip()
 
-        target_text = target_text.upper()
+        target_text = target_text.lower()
         target_text = re.sub(r"[^\w\s]", "", target_text)
         target_text = re.sub(r"\s+", " ", target_text)
         target_text = target_text.strip()
@@ -39,7 +40,7 @@ class WER:
         predictions = [transcript_text]
         references = [target_text]
         wer_score = self.wer.compute(predictions=predictions, references=references)
-        return wer_score
+        return wer_score, transcript_text, target_text
 
     def __call__(self, audio, gt_text):
         # need 16khz audio, 1-dimensional
@@ -52,8 +53,8 @@ class WER:
         # remove special characters
         transcript_text = re.sub(r"[^\w\s]", "", transcript_text)
 
-        wer_score = self.calc(transcript_text, gt_text)
-        return wer_score
+        wer_score, transcript_text, target_text = self.calc(transcript_text, gt_text)
+        return wer_score, transcript_text, target_text
 
 class SIM:
     def __init__(self):
@@ -62,7 +63,7 @@ class SIM:
         print("Loading WavLM-large-finetuned")
         self.speaker_encoder = init_model(checkpoint=WAVLM_LARGE_FINTUNED_PATH).to("cuda").eval()
     def __call__(self, audio1, audio2):
-        breakpoint()
+        # need 16khz audio, 1-dimensional
         audio1 = audio1.unsqueeze(0).to("cuda")
         audio2 = audio2.unsqueeze(0).to("cuda")
         with torch.no_grad():
@@ -111,51 +112,138 @@ class LibriSpeechDevDataset(torch.utils.data.Dataset):
             'output_path': os.path.basename(wav_file)[:-5] + '.wav',
         }
 
+import json
+class LibriSpeechTestDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir=None, use_vocos=False):
+        self.data_dir = '/mnt/petrelfs/hehaorui/jiaqi/vc-dev/Wave16k16bNormalized'
+        self.wav_list = []
+        self.transcripts = {}
+        self.target_transcripts = {}
+
+        # load json file
+        with open('/mnt/petrelfs/hehaorui/jiaqi/vc-dev/librispeech_ref_dur_3_test_full_with_punc_wdata.json', 'r') as f:
+            json_data = f.read()
+        data = json.loads(json_data)
+
+        test_data = data["test_cases"]
+
+        self.output_path = []
+        for wav_info in test_data:
+            wav_path =os.path.join(self.data_dir, wav_info["wav_path"].split('/')[-1])
+            self.wav_list.append(wav_path)
+            # print(wav_info["wav_path"])
+            wav_path = wav_info["wav_path"].split('/')[-1][:-4]
+            self.transcripts[wav_path] = wav_info["text"] + " " + wav_info["target_text"]
+            self.target_transcripts[wav_path] = wav_info["target_text"]
+            # print(self.transcripts[wav_path])
+            output_file_name = wav_info["uid"] + '.wav'
+            self.output_path.append(output_file_name)
+
+    def __len__(self):
+        return len(self.wav_list)
+
+    def __getitem__(self, idx):
+        wav_file = self.wav_list[idx]
+        transcript = self.transcripts[os.path.basename(wav_file)[:-4]]
+        target_transcript = self.target_transcripts[os.path.basename(wav_file)[:-4]]
+        # remove punctuation
+        transcript = ''.join(e for e in transcript if e.isalnum() or e.isspace()).lower()
+        orig_transcript = transcript
+        transcript = g2p(transcript, 'en')[1]
+        # transcript = [LANG2CODE['en']] + transcript
+        transcript = torch.tensor(transcript, dtype=torch.long)
+
+        speech, _ = librosa.load(wav_file, sr=24000)
+        # resample to 24k
+        # speech = librosa.resample(speech, orig_sr=16000, target_sr=24000)
+        speech = torch.tensor(speech, dtype=torch.float32)
+
+        return {
+            'speech': speech, # prompt speech. do not include gt
+            'phone_ids': transcript,
+            'orig_transcript': orig_transcript,
+            'target_transcript': target_transcript,
+            'output_path': self.output_path[idx],
+        }
+
+
 
 def test():
-  # initialize a librispeech test dataset instance.
-  # This requires having a librispeech test set.
-  # Alternatively, you could write your own dataset instance, as long as it returns similar entries.
-    dataset = LibriSpeechDevDataset()
+    # dataset = LibriSpeechDevDataset()
+    dataset = LibriSpeechTestDataset()
     from .valle_inference import ValleInference
-    inference = ValleInference(use_vocos=True)
+    inference = ValleInference(use_vocos=True, 
+                               ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls/checkpoint/epoch-0005_step-0406000_loss-2.203645/pytorch_model.bin',
+                               nar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/nar_mls/checkpoint/epoch-0005_step-0266000_loss-2.462479/pytorch_model.bin')
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+    if test_wer:
+        wer = WER()
+    if test_sim:
+        sim = SIM()
     
+ 
     import tqdm
+    
+    wer_scores = []
+    similarity_scores = []
+    fid_scores = []
+    total_cnt = 0
+
+    shutil.rmtree('wer_abnormals_output/*', ignore_errors=True)
 
     for num_beams in [1]:
-            for top_k in [10]:
+            for top_k in [15]:
                 for top_p in [1.0]:
                     for repeat_penalty in [1.15]:
-                        for temperature in [1.1]:
+                        for temperature in [1.2]:
         
     
                             for batch in tqdm.tqdm(dataloader):
-                                if batch['speech'].shape[-1] < 10*24000:
-                                    continue
-                                print(batch['transcript'][0].lower())
-                                chunks = []
-                                chunks += [dict(top_p=top_p,
+                                # if batch['speech'].shape[-1] < 10*24000:
+                                #     continue
+                                # print(batch['target_transcript'][0].lower())
+                                chunks = [dict(top_p=top_p,
                                     top_k=top_k,
                                     temperature=temperature,
                                     num_beams=num_beams,
                                     repeat_penalty=repeat_penalty,
                                     max_length=2000,)]
-                                # chunks += [dict(top_p=top_p,
-                                #     top_k=top_k,
-                                #     temperature=temperature,
-                                #     num_beams=num_beams,
-                                #     repeat_penalty=1.05,
-                                #     max_length=75*3+75+start_length,)]
-                                # chunks += [dict(top_p=top_p,
-                                #     top_k=top_k,
-                                #     temperature=temperature,
-                                #     num_beams=num_beams,
-                                #     repeat_penalty=repeat_penalty,
-                                #     max_length=75+75+start_length+2000,)]
-                                output_wav = inference(batch, chunks)
-                                torchaudio.save(f'recovered_audio_ar_{num_beams}_{top_k}_{top_p}_{repeat_penalty}_{temperature}.wav', output_wav[0].cpu(), 24000)
-                                print(f'recovered_audio_ar_{num_beams}_{top_k}_{top_p}_{repeat_penalty}_{temperature}.wav')
+                                output_wav = inference(batch, chunks, return_prompt=False)
+                                
+                                torchaudio.save(f"infer/{batch['output_path'][0]}", output_wav[0].cpu(), 24000)
+                                print(f'saved to ' + f"infer/{batch['output_path'][0]}")
+
+                                # resample to 16k
+                                output_wav_resampled = torchaudio.functional.resample(output_wav, orig_freq=24000, new_freq=16000)
+                                if test_wer:
+                                    # get wer score
+                                    wer_score, transcribed, gt_text = wer(output_wav_resampled.squeeze(0).squeeze(0), batch['target_transcript'][0])
+                                    print(f"WER: {wer_score}")
+                                    wer_scores.append(wer_score)
+                                    print(f'average wer: {sum(wer_scores)/len(wer_scores)}')
+
+                                    if wer_score > 0.1:
+                                        # save
+                                        torchaudio.save(f'wer_abnormals_output/{batch["output_path"][0]}', output_wav[0].cpu(), 24000)
+                                        # torchaudio.save(f'wer_abnormals_gt/{batch["output_path"][0]}', output_wav[0].cpu(), 24000)
+                                        with open(f'wer_abnormals_output/{batch["output_path"][0][:-4]}.txt', 'w') as f:
+                                            f.write('target: ')
+                                            f.write(gt_text)
+                                            f.write('\n')
+                                            f.write('transcribed: ')
+                                            f.write(transcribed)
+                                            f.write('\n')
+                                            f.write(f'wer: {wer_score}')
+                                            print(f'target: {batch["target_transcript"][0]}, transcribed: {transcribed.lower()}')
+                                if test_sim:
+                                    # get similarity score
+                                    batch_speech_resampled = torchaudio.functional.resample(batch['speech'], orig_freq=24000, new_freq=16000)
+                                    sim_score = sim(output_wav_resampled.squeeze(0).squeeze(0), batch_speech_resampled.squeeze(0))
+                                    similarity_scores.append(sim_score)
+                                    print(f"SIM: {sim_score}")
+                                    print(f'average sim: {sum(similarity_scores)/len(similarity_scores)}')
+
+                                
 
     
 if __name__ == '__main__':
