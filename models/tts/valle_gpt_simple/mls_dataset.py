@@ -5,10 +5,8 @@
 
 import random
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from utils.data_utils import *
 from tqdm import tqdm
-from g2p_en import G2p
 import librosa
 from petrel_client.client import Client
 from torch.utils.data import Dataset
@@ -19,7 +17,7 @@ import io
 from multiprocessing import Pool, Lock
 NUM_WORKERS=32
 lock = Lock()
-SAMPLE_RATE=16000
+SAMPLE_RATE=24000
 def get_duration(file_path):
     duration = librosa.get_duration(path=file_path, sr=SAMPLE_RATE)
     return file_path, duration
@@ -62,6 +60,7 @@ class VALLEDataset(Dataset):
         self.client = Client('/mnt/petrelfs/hehaorui/petreloss.conf')
         self.resample_to_24k = resample_to_24k
         if self.resample_to_24k:
+            assert SAMPLE_RATE == 24000
             print(f'Using 24k resampling.')
 
 
@@ -265,6 +264,7 @@ class VALLEDataset(Dataset):
                     audio_files.append(rel_path)
         return audio_files
     
+    # only includes audio tokens
     def get_num_frames(self, index):
         # get_num_frames(durations) by index
         duration = self.meta_data_cache['duration'][index]
@@ -374,8 +374,6 @@ class VALLEDataset(Dataset):
         assert file_bytes is not None, f"file {full_file_path} not found"
         buffer = io.BytesIO(file_bytes)
         speech, _ = librosa.load(buffer, sr=SAMPLE_RATE)
-        if self.resample_to_24k:
-            speech = librosa.resample(speech, orig_sr=SAMPLE_RATE, target_sr=24000)
         speech = torch.tensor(speech, dtype=torch.float32)
         # pad speech to multiples of 200
         remainder = speech.size(0) % 200

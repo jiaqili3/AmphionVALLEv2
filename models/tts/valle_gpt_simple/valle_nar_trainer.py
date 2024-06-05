@@ -63,10 +63,10 @@ class ValleNARTrainer(ValleARTrainer):
         batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
         assert batch['speech_len'].max() <= batch['speech'].shape[-1]
 
-        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=True).to(torch.long)
+        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=False).to(torch.long)
         speech_mask = 1 - make_pad_mask(batch['speech_len'], max_len=batch['speech'].size(-1)).to(torch.long)
 
-        np.random.seed(int(time.time()) + self.accelerator.num_processes)
+        np.random.seed(int(time.time()) - 5*self.accelerator.process_index)
 
         out = self.model(
             phone_ids = batch['phone_ids'],
