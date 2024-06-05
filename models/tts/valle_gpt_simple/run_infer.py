@@ -169,8 +169,8 @@ class LibriSpeechTestDataset(torch.utils.data.Dataset):
 
 
 def test():
-    # dataset = LibriSpeechDevDataset()
-    dataset = LibriSpeechTestDataset()
+    dataset = LibriSpeechDevDataset()
+    # dataset = LibriSpeechTestDataset()
     from .valle_inference import ValleInference
     inference = ValleInference(use_vocos=True, 
                                ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls/checkpoint/epoch-0005_step-0406000_loss-2.203645/pytorch_model.bin',
@@ -189,18 +189,20 @@ def test():
     fid_scores = []
     total_cnt = 0
 
-    shutil.rmtree('wer_abnormals_output/*', ignore_errors=True)
-
+    shutil.rmtree('infer', ignore_errors=True)
+    shutil.rmtree('wer_abnormals_output', ignore_errors=True)
+    os.mkdir('infer')
+    os.mkdir('wer_abnormals_output')
     for num_beams in [1]:
             for top_k in [15]:
                 for top_p in [1.0]:
-                    for repeat_penalty in [1.15]:
-                        for temperature in [1.2]:
+                    for repeat_penalty in [1.2]:
+                        for temperature in [1.15]:
         
     
                             for batch in tqdm.tqdm(dataloader):
-                                # if batch['speech'].shape[-1] < 10*24000:
-                                #     continue
+                                if batch['speech'].shape[-1] < 10*24000 or batch['speech'].shape[-1] > 20*24000:
+                                    continue
                                 # print(batch['target_transcript'][0].lower())
                                 chunks = [dict(top_p=top_p,
                                     top_k=top_k,
@@ -208,7 +210,14 @@ def test():
                                     num_beams=num_beams,
                                     repeat_penalty=repeat_penalty,
                                     max_length=2000,)]
-                                output_wav = inference(batch, chunks, return_prompt=False)
+                                
+                                if isinstance(dataset, LibriSpeechDevDataset):
+                                    output_wav = inference(batch, chunks, return_prompt=True)
+                                else:
+                                    output_wav = inference(batch, chunks, return_prompt=False)
+                                    
+                                
+                                # output_wav = batch['speech'].unsqueeze(0)
                                 
                                 torchaudio.save(f"infer/{batch['output_path'][0]}", output_wav[0].cpu(), 24000)
                                 print(f'saved to ' + f"infer/{batch['output_path'][0]}")
@@ -235,6 +244,7 @@ def test():
                                             f.write('\n')
                                             f.write(f'wer: {wer_score}')
                                             print(f'target: {batch["target_transcript"][0]}, transcribed: {transcribed.lower()}')
+                                            print(f'wer_abnormals_output/{batch["output_path"][0][:-4]}.txt')
                                 if test_sim:
                                     # get similarity score
                                     batch_speech_resampled = torchaudio.functional.resample(batch['speech'], orig_freq=24000, new_freq=16000)

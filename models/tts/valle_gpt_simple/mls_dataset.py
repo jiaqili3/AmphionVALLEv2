@@ -37,7 +37,18 @@ from utils.g2p.g2p import phonemizer_g2p
 #     'en': 655,
 #     'zh': 654,
 # }
+import logging
+class PhonemizerWarningFilter(logging.Filter):
+    def filter(self, record):
+        # 只过滤 phonemizer 中的 WARNING 级别日志
+        if record.name == 'phonemizer' and record.levelno == logging.WARNING:
+            return False
+        return False
 
+logger = logging.getLogger('phonemizer')
+filter = PhonemizerWarningFilter()
+logger.addFilter(filter)
+logging.basicConfig(level=logging.INFO)
 
 class VALLEDataset(Dataset):
     def __init__(self, args, is_valid=False, resample_to_24k=False):

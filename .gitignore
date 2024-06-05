@@ -1,6 +1,6 @@
 # Mac OS files
 .DS_Store
-
+*.txt
 # IDEs
 .idea
 .vs

@@ -97,7 +97,7 @@ class ValleInference(torch.nn.Module):
             for chunk in chunks:
                 ar_vq_ids = self.ar_model.sample_hf(
                     batch['phone_ids'],
-                    vq_id[0, :, :],
+                    vq_id[0, :, :225],
                     top_p=chunk['top_p'],
                     top_k=chunk['top_k'],
                     temperature=chunk['temperature'],
@@ -108,17 +108,21 @@ class ValleInference(torch.nn.Module):
                 recovered_audio_ar = self.decode(ar_vq_ids.unsqueeze(0))
                 torchaudio.save('recovered_audio_ar.wav', recovered_audio_ar[0].cpu(), 24000)
 
+                nar_gt_end_layer = 2
                 nar_vq_ids = self.nar_model.sample_hf(
                     phone_ids=batch['phone_ids'],
-                    prompt_ids=vq_id[:,:,:],
-                    first_stage_ids=ar_vq_ids,
+                    prompt_ids=vq_id[:,:,:225],
+                    # first_stage_ids=ar_vq_ids,
+                    first_stage_ids=vq_id[0, :, 225:],
                     top_p=1.0,
                     top_k=40,
                     temperature=1.0,
+                    first_stage_ids_gt=vq_id[:, :, 225:],
+                    first_stage_ids_gt_end_layer=nar_gt_end_layer,
                 )
-
+                
                 if return_prompt:
-                    nar_vq_ids = torch.cat([vq_id[..., :], nar_vq_ids], dim=-1)
+                    nar_vq_ids = torch.cat([vq_id[..., :225], nar_vq_ids], dim=-1)
 
                 recovered_audio = self.decode(nar_vq_ids)
                 return recovered_audio

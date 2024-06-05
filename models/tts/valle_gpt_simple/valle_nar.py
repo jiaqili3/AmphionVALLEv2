@@ -340,9 +340,9 @@ class LlamaForNARModeling(LlamaPreTrainedModel):
         
         if prediction_target is not None:
             # calculate loss if prediction_target is provided
-            logits = logits.view(-1, logits.size(-1))
+            logits_tmp = logits.view(-1, logits.size(-1))
             prediction_target = prediction_target.view(-1)
-            loss = loss_fct(logits, prediction_target)
+            loss = loss_fct(logits_tmp, prediction_target)
 
         return edict(
             loss=loss,
@@ -396,8 +396,6 @@ class ValleNAR(nn.Module):
 
         self.phone_embedder = nn.Embedding(self.phone_vocab_size+10, hidden_size) # use phone_embedder to embed all eos, bos tokens
         self.prompt_embedder = MultiEmbedding(num_embeddings=self.target_vocab_size, embedding_dim=hidden_size, num_quantization_layers=8)
-
-        self.accuracy_metric = MulticlassAccuracy(num_classes=phone_vocab_size + target_vocab_size + 10, top_k=10, multidim_average='samplewise')
 
         self.phone_embedder.weight.data.normal_(mean=0.0, std=0.02)
 
@@ -470,8 +468,23 @@ class ValleNAR(nn.Module):
             attention_mask=input_mask,
             return_dict=True,
         )
+        logits = out.logits[:, -target_embedding.shape[1]:, :]
+        targets = prediction_target[..., -target_embedding.shape[1]:]
+        top1_acc = (logits.argmax(-1) == targets)
+        top1_acc = (top1_acc * target_mask).sum() / target_mask.sum()
 
-        # acc = self.accuracy_metric(out.logits, prediction_target)
+        top5_acc = (logits.topk(5, dim=-1).indices == targets.unsqueeze(-1)).any(-1)
+        top5_acc = (top5_acc * target_mask).sum() / target_mask.sum()
+
+        top10_acc = (logits.topk(10, dim=-1).indices == targets.unsqueeze(-1)).any(-1)
+        top10_acc = (top10_acc * target_mask).sum() / target_mask.sum()
+
+
+        out.target_quantization_layer = target_quantization_layer
+        out.top1_acc = top1_acc
+        out.top5_acc = top5_acc
+        out.top10_acc = top10_acc
+
         return out
 
     def add_phone_eos_bos_label(
@@ -502,6 +515,8 @@ class ValleNAR(nn.Module):
         top_k=50,
         top_p=1,
         temperature=1.1,
+        first_stage_ids_gt=None, # [Q, B, T]
+        first_stage_ids_gt_end_layer=None, # 2 to 8
     ):
         '''
         phone_ids: [B, T]
@@ -513,9 +528,16 @@ class ValleNAR(nn.Module):
         assert prompt_ids.shape[-1] >= 5, "prompt_ids should have at least 5 tokens"
         target_ids = torch.cat([prompt_ids, first_stage_ids.expand(prompt_ids.shape[0],-1,-1)], dim=-1)
         target_mask = torch.ones_like(target_ids[0], dtype=torch.long)
+        
+        if first_stage_ids_gt is not None:
+            target_ids[:first_stage_ids_gt_end_layer, :, -first_stage_ids_gt.shape[-1]:] = first_stage_ids_gt[:first_stage_ids_gt_end_layer]
 
         gen_len = first_stage_ids.shape[-1]
-        for qnt_level in range(1, 8):
+        
+        start_qnt_layer = 1
+        if first_stage_ids_gt_end_layer is not None:
+            start_qnt_layer = first_stage_ids_gt_end_layer
+        for qnt_level in range(start_qnt_layer, 8):
             out = self.forward(
                 phone_ids=phone_ids,
                 phone_mask=phone_mask,
@@ -525,9 +547,7 @@ class ValleNAR(nn.Module):
                 prompt_len=prompt_ids.shape[-1]
             )
             logits = out.logits
-            from utils.topk_sampling import topk_sampling
-            # gen_tokens = topk_sampling(logits, top_k=top_k, top_p=top_p, temperature=temperature)[-gen_len:].reshape(-1) # [B, T], generated tokens in this level
-            gen_tokens = torch.argmax(logits, dim=-1)[-gen_len:] # [T], generated tokens in this level
+            gen_tokens = torch.argmax(logits, dim=-1).reshape(-1)[-gen_len:] # [T], generated tokens in this level
 
             # overwrite the target_ids with the generated tokens
             target_ids[qnt_level, :, -gen_len:] = gen_tokens

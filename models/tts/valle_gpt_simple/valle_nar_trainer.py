@@ -9,6 +9,34 @@ class ValleNARTrainer(ValleARTrainer):
     def __init__(self, args=None, cfg=None):
         super().__init__(args, cfg)
         print('simple NAR')
+        self.top1_accuracies = {
+            1: [],
+            2: [],
+            3: [],
+            4: [],
+            5: [],
+            6: [],
+            7: [],
+        }
+        self.top5_accuracies = {
+            1: [],
+            2: [],
+            3: [],
+            4: [],
+            5: [],
+            6: [],
+            7: [],
+        }
+        self.top10_accuracies = {
+            1: [],
+            2: [],
+            3: [],
+            4: [],
+            5: [],
+            6: [],
+            7: [],
+        }
+
     def _build_model(self):
         from .valle_nar import ValleNAR
         return ValleNAR(**self.cfg.model)
@@ -47,6 +75,14 @@ class ValleNARTrainer(ValleARTrainer):
             target_mask=speech_mask,
         )
         loss = out.loss
+
+        # if hasattr(out, 'top1_acc'):
+        #     idx = out.target_quantization_layer
+        #     self.top1_accuracies[idx].append(out.top1_acc)
+        #     self.top5_accuracies[idx].append(out.top5_acc)
+        #     self.top10_accuracies[idx].append(out.top10_acc)
+        #     if len(self.top1_accuracies[idx]) >= 160:
+        #         breakpoint()
         # if self.accelerator.is_main_process:
         #     print(loss)
         return loss

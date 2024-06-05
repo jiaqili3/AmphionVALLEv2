@@ -123,7 +123,25 @@ class ValleAR(nn.Module):
             labels=labels,
             return_dict=True,
         )
-        # breakpoint()
+
+        # calcualte top1, top5, top10 accuracy
+        logits = out.logits
+        logits = logits[:, -target_ids.shape[1] :]
+        top1_acc = (logits.argmax(-1)[...,:-1] == target_ids[:, 1:])
+        top1_acc = (top1_acc * target_mask[...,:-1]).sum() / target_mask.sum()
+
+        top5_acc = torch.topk(logits[..., :-1, :], 5, dim=-1)[1]
+        top5_acc = (top5_acc == target_ids[:, 1:].unsqueeze(-1))
+        top5_acc = (top5_acc * target_mask[...,:-1].unsqueeze(-1)).sum() / target_mask.sum()
+
+        top10_acc = torch.topk(logits[..., :-1, :], 10, dim=-1)[1]
+        top10_acc = (top10_acc == target_ids[:, 1:].unsqueeze(-1))
+        top10_acc = (top10_acc * target_mask[...,:-1].unsqueeze(-1)).sum() / target_mask.sum()
+
+        out.top1_acc = top1_acc
+        out.top5_acc = top5_acc
+        out.top10_acc = top10_acc
+
         return out
 
     def add_phone_eos_bos_label(

@@ -57,6 +57,9 @@ class ValleARTrainer(BaseTrainer):
             self.codec_encoder.set_target_bandwidth(6.0)
             self.codec_encoder.to(self.accelerator.device)
             self.codec_decoder = None    
+        self.top1_accuracies = []
+        self.top5_accuracies = []
+        self.top10_accuracies = []
     def _accelerator_prepare(self):
         # if self.accelerator.is_main_process:
         #     breakpoint()
@@ -122,6 +125,12 @@ class ValleARTrainer(BaseTrainer):
         loss = out.loss
         # if self.accelerator.is_main_process:
         #     print(loss)
+        # if hasattr(out, 'top1_acc'):
+        #     self.top1_accuracies.append(out.top1_acc)
+        #     self.top5_accuracies.append(out.top5_acc)
+        #     self.top10_accuracies.append(out.top10_acc)
+        #     print(f'avgs: top1: {sum(self.top1_accuracies)/len(self.top1_accuracies)}, top5: {sum(self.top5_accuracies)/len(self.top5_accuracies)}, top10: {sum(self.top10_accuracies)/len(self.top10_accuracies)}')
+        #     breakpoint()
         return loss
     
     ##########add your own dataloader to the trainer#############
