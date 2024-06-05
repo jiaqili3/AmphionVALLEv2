@@ -7,9 +7,10 @@ import torch.nn as nn
 from typing import List, Optional, Tuple, Union
 
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
-from torchmetrics.classification import MulticlassAccuracy
 
-NUM_PROMPT_TOKENS=225
+NUM_QUANTIZERS = 8 # number of quantizers in total, currently assumes first layer AR.
+START_QUANTIZATION_LAYER = 1 # start quantization layer
+END_QUANTIZATION_LAYER = 7 # end quantization layer
 
 class LlamaAdaptiveRMSNorm(nn.Module):
     def __init__(self, hidden_size=1024, eps=1e-6, dim_cond=1024):
@@ -32,7 +33,7 @@ class LlamaAdaptiveRMSNorm(nn.Module):
 class LlamaNARDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: LlamaConfig):
         '''Override to adaptive layer norm'''
-        super().__init__(config=config) # init attention, mlp, etc.
+        super().__init__(config=config, layer_idx=0) # init attention, mlp, etc.
         self.input_layernorm = LlamaAdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size)
         self.post_attention_layernorm = LlamaAdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size)
     
@@ -96,7 +97,7 @@ from transformers.models.llama.modeling_llama import BaseModelOutputWithPast
 
 class MultiEmbedding(nn.Module):
     '''Embedding for multiple quantization layers, summing up the embeddings of each layer.'''
-    def __init__(self, num_embeddings=1034, embedding_dim=1024, num_quantization_layers=8):
+    def __init__(self, num_embeddings=1034, embedding_dim=1024, num_quantization_layers=NUM_QUANTIZERS):
         super().__init__()
         self.embeddings = nn.ModuleList([nn.Embedding(num_embeddings, embedding_dim) for _ in range(num_quantization_layers)])
 
@@ -120,7 +121,7 @@ class LlammaNARModel(LlamaModel):
         self.layers = nn.ModuleList([LlamaNARDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaAdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size)
 
-        self.embed_cond = nn.Embedding(8, config.hidden_size) # 7 quantization layers
+        self.embed_cond = nn.Embedding(NUM_QUANTIZERS, config.hidden_size) # 7 quantization layers
 
         for layer in self.layers:
             layer.input_layernorm = LlamaAdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size)
@@ -289,7 +290,7 @@ class LlamaForNARModeling(LlamaPreTrainedModel):
         self.lm_head = nn.ModuleList(
             [
                 nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-                for i in range(7)
+                for i in range(END_QUANTIZATION_LAYER-START_QUANTIZATION_LAYER+1)
             ]
         )
 
@@ -333,7 +334,7 @@ class LlamaForNARModeling(LlamaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head[cond-1](hidden_states)
+        logits = self.lm_head[cond-START_QUANTIZATION_LAYER](hidden_states)
 
         loss = None
         loss_fct = CrossEntropyLoss()
@@ -395,9 +396,13 @@ class ValleNAR(nn.Module):
         self.use_input_embeds = use_input_embeds
 
         self.phone_embedder = nn.Embedding(self.phone_vocab_size+10, hidden_size) # use phone_embedder to embed all eos, bos tokens
-        self.prompt_embedder = MultiEmbedding(num_embeddings=self.target_vocab_size, embedding_dim=hidden_size, num_quantization_layers=8)
+        self.prompt_embedder = MultiEmbedding(num_embeddings=self.target_vocab_size, embedding_dim=hidden_size, num_quantization_layers=NUM_QUANTIZERS)
 
         self.phone_embedder.weight.data.normal_(mean=0.0, std=0.02)
+        
+        # use linear mask schedule when training
+        # another option is uniform
+        self.mask_layer_schedule = "linear"
 
         # no input embedding is used to provide speaker information
         if self.use_input_embeds:
@@ -406,43 +411,74 @@ class ValleNAR(nn.Module):
             self.emb_linear.bias.data.zero_()
     
     def forward(
-        self, phone_ids, phone_mask, target_ids, target_mask, input_embeds=None,
+        self, phone_ids, phone_mask, target_ids, target_mask, 
         target_quantization_layer=None, prompt_len=None,
     ):
         '''
         phone_ids: [B, T]
         phone_mask: [B, T]
         target_ids: [8,B,T]
+        target_mask: [B, T]
         '''
-        if input_embeds is not None:
-            input_embeds = self.emb_linear(input_embeds)
-        phone_ids, phone_mask, phone_label = self.add_phone_eos_bos_label(
-            phone_ids,
-            phone_mask,
-            self.eos_phone_id,
-            self.bos_phone_id,
-            self.pad_token_id,
-        )
+        assert (target_ids < 1024).all(), "target_ids should be less than 1024"
+        phone_ids = phone_ids + self.target_vocab_size
+        phone_ids = phone_ids * phone_mask + (1-phone_mask) * self.pad_token_id
+        # assert (phone_ids >= 1024).all(), "phone_ids should be greater than 1024"
+        # phone_ids, phone_mask, phone_label = self.add_phone_eos_bos_label(
+        #     phone_ids,
+        #     phone_mask,
+        #     self.eos_phone_id,
+        #     self.bos_phone_id,
+        #     self.pad_token_id,
+        # )
+        phone_label = -100 * (1-phone_mask)
         # get phone embedding
         phone_embedding = self.phone_embedder(phone_ids-self.target_vocab_size) # [B, T, H]
 
-        # randomly select a prompt length
-        NUM_PROMPT_TOKENS = prompt_len or np.random.randint(
-            min(target_ids.shape[-1]//4, 5), target_ids.shape[-1]//2
-        )
+        if prompt_len is not None:
+            assert not self.training # inference stage fix prompt len to input
+            NUM_PROMPT_TOKENS = prompt_len
+        else:
+            # randomly select a prompt length
+            assert self.training # randomize prompt len in training
+            NUM_PROMPT_TOKENS = np.random.randint(
+                min(target_ids.shape[-1]//4, 5), target_ids.shape[-1]//2
+            )
 
         # extract 8-level prompts
-        prompt_tokens = target_ids[:, :, :NUM_PROMPT_TOKENS]
+        prompt_tokens = target_ids[:, :, :NUM_PROMPT_TOKENS] # [Q, B, T]
         prompt_mask = torch.ones_like(prompt_tokens[0])
         prompt_label = -100 * prompt_mask
         # get prompt embedding
         prompt_embedding = self.prompt_embedder(prompt_tokens) # [B, T, H]
 
-        # randomly select a target to predict
+        # randomly select a target qnt layer to predict
         # total quant layer is 0 to 7
         if target_quantization_layer is None:
-            target_quantization_layer = np.random.randint(1, 8)
+            if self.mask_layer_schedule == "linear":
+                weights = torch.tensor(
+                    [NUM_QUANTIZERS - i for i in range(START_QUANTIZATION_LAYER, END_QUANTIZATION_LAYER+1)]
+                )
+                weights = weights / weights.sum()
+                mask_layer = torch.multinomial(weights, 1, replacement=True) + START_QUANTIZATION_LAYER
+                assert mask_layer >= START_QUANTIZATION_LAYER and mask_layer <= END_QUANTIZATION_LAYER
+                target_quantization_layer = mask_layer.item()
+            elif self.mask_layer_schedule == "cosine":
+                weights = torch.tensor(
+                    [
+                        np.cos(i / NUM_QUANTIZERS * np.pi / 2)
+                        for i in range(START_QUANTIZATION_LAYER, END_QUANTIZATION_LAYER+1)
+                    ]
+                )
+                weights = weights / weights.sum()
+                mask_layer = torch.multinomial(weights, 1, replacement=True) + START_QUANTIZATION_LAYER
+                assert mask_layer >= START_QUANTIZATION_LAYER and mask_layer <= END_QUANTIZATION_LAYER
+                target_quantization_layer = mask_layer.item()
+                breakpoint()
+            elif self.mask_layer_schedule == "uniform":
+                target_quantization_layer = np.random.randint(START_QUANTIZATION_LAYER, END_QUANTIZATION_LAYER+1)
 
+            # print(f'target layer: {target_quantization_layer}')
         # prompt of the target part
         target_prompt_ids = target_ids[:target_quantization_layer, :, NUM_PROMPT_TOKENS:]
         target_embedding = self.prompt_embedder(target_prompt_ids)
@@ -452,13 +488,10 @@ class ValleNAR(nn.Module):
         
         target_labels = target_ids[target_quantization_layer, :, NUM_PROMPT_TOKENS:] * target_mask + (-100 * (1-target_mask))
 
-        # prompt eos embedding
-        prompt_eos_embedding = self.phone_embedder(torch.tensor(self.eos_prompt_id-self.target_vocab_size, device=phone_ids.device).reshape(1).expand(phone_ids.shape[0], -1)) # [B, 1, H]
-
         # input embeddings
-        input_embeddings = torch.cat([phone_embedding, prompt_embedding, prompt_eos_embedding, target_embedding], dim=1)
-        input_mask = torch.cat([phone_mask, prompt_mask, torch.ones((phone_mask.shape[0], 1), dtype=torch.long, device=phone_mask.device), target_mask], dim=1) # [B, T]
-        prediction_target = torch.cat([phone_label, prompt_label, -100*torch.ones((phone_mask.shape[0], 1), dtype=torch.long, device=phone_mask.device), target_labels], dim=1) # [B, T]
+        input_embeddings = torch.cat([phone_embedding, prompt_embedding, target_embedding], dim=1)
+        input_mask = torch.cat([phone_mask, prompt_mask, target_mask], dim=1) # [B, T]
+        prediction_target = torch.cat([phone_label, prompt_label, target_labels], dim=1) # [B, T]
 
 
         out = self.model(
