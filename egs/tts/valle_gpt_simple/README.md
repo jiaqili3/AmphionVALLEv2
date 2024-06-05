@@ -64,7 +64,7 @@ Make file `libritts_dataset.py`
 ```py
         ######## add data dir to dataset2dir ##########
         self.dataset2dir = {
-            'dev_clean' : '/[YourWorkspace]/data/LibriTTS',
+            'dev-clean' : '/[YourWorkspace]/data/LibriTTS',
         }
 ```
 
@@ -192,10 +192,10 @@ Config `use_dynamic_dataset` is used to solve the problem of inconsistent sequen
         },
 ```
 
-Set our dataset list as `dev_clean` , `cache_dir` and `noise_dir` and `content_model_path` are not used, so don't worry about setting them.
+Set our dataset list as `dev-clean` , `cache_dir` and `noise_dir` and `content_model_path` are not used, so don't worry about setting them.
 ```json
     "trans_exp": {
-      "dataset_list":["dev_clean"],
+      "dataset_list":["dev-clean"],
       "cache_dir": "/mnt/workspace/lizhekai/data/exp_cache/tts/",
       "use_speaker": false,
       "use_noise": false,

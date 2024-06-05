@@ -42,19 +42,19 @@ cd $work_dir
 
 ######## Set Config File Dir ##############
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_ar_libritts.json
+    exp_config="${exp_dir}"/exp_nar_libritts.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
 ######## Set the experiment name ##########
-exp_name="ar_libritts_dev_clean"
+exp_name="nar_libritts_dev_clean"
 
-port=53333
+port=17004
 
 ######## Train Model ###########
 echo "Experimental Name: $exp_name"
 CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --main_process_port $port "${work_dir}"/bins/tts/train.py --config $exp_config --exp_name $exp_name --log_level debug 
-    --resume \
-    --resume_type "resume"
+    # --resume \
+    # --resume_type "resume"
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint

@@ -53,11 +53,18 @@ class VALLEDataset(Dataset):
 
         ######## add data dir to dataset2dir ##########
         self.dataset2dir = {
-            'dev_clean' : '/mnt/workspace/lizhekai/data/LibriTTS',
+            'dev-clean' : '/mnt/workspace/lizhekai/data/LibriTTS/dev-clean',
+            'dev-other' : '/mnt/workspace/lizhekai/data/LibriTTS/dev-other',
+            'test-clean' : '/mnt/workspace/lizhekai/data/LibriTTS/test-clean',
+            'test-other' : '/mnt/workspace/lizhekai/data/LibriTTS/test-other',
+            'train-clean-100' : '/mnt/workspace/lizhekai/data/LibriTTS/train-clean-100',
+            'train-clean-360' : '/mnt/workspace/lizhekai/data/LibriTTS/train-clean-360',
+            'train-other-500' : '/mnt/workspace/lizhekai/data/LibriTTS/train-other-500',
         }
         
         ###### load metadata and transcripts #####
         for dataset_name in self.dataset_list:
+            print("Initializing dataset: ", dataset_name)
             # get [book,transcripts,audio] files list
             self.book_files_list = self.get_metadata_files(self.dataset2dir[dataset_name])
             self.trans_files_list = self.get_trans_files(self.dataset2dir[dataset_name])

@@ -1,16 +1,16 @@
 {
-    "model_type": "valle_simple_ar",
+    "model_type": "valle_simple_nar",
     "log_dir": "/mnt/workspace/lizhekai/AmphionVALLEv2/ckpt/valle_gpt_simple",
     "train": {
         "gradient_accumulation_step": 1,
-        "find_unused_parameters": false,
+        "find_unused_parameters": true,
         "tracker": ["tensorboard"],
         "max_epoch": 1000,
         "save_checkpoint_stride": [2000],
         "keep_last": [1],
         "run_eval": [true],
         "dataloader": {
-          "num_worker": 32,
+          "num_worker": 8,
           "pin_memory": true,
           "persistent_workers": true
         },
@@ -19,12 +19,11 @@
           "use_dynamic_batchsize": false,
           "name": "libritts"
         },
-        "optimizer": "adamW",
+        "optimizer": "adamw",
         "adam": {
           "betas": [0.9, 0.98],
           "eps": 1e-9,
-          "lr": 4e-4,
-          "weight_decay": 0.01
+          "lr": 2e-4
         },
         "adamw": {
           "lr": 3.5e-4
@@ -38,7 +37,7 @@
           "gamma": 0.999999
         },
         "batch_size": 5,
-        "max_tokens": 11000,
+        "max_tokens": 10500,
         "max_sentences": 64,
         "random_seed": 0
     }, 
