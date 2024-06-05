@@ -375,10 +375,10 @@ class VALLEDataset(Dataset):
         buffer = io.BytesIO(file_bytes)
         speech, _ = librosa.load(buffer, sr=SAMPLE_RATE)
         speech = torch.tensor(speech, dtype=torch.float32)
-        # pad speech to multiples of 200
-        remainder = speech.size(0) % 200
+        # pad speech to multiples of 320
+        remainder = speech.size(0) % 320
         if remainder > 0:
-            pad = 200 - remainder
+            pad = 320 - remainder
             speech = torch.cat([speech, torch.zeros(pad, dtype=torch.float32)], dim=0)
 
         # inputs = self._get_reference_vc(speech, hop_length=200)

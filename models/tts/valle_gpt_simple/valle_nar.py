@@ -13,11 +13,12 @@ START_QUANTIZATION_LAYER = 1 # start quantization layer
 END_QUANTIZATION_LAYER = 7 # end quantization layer
 
 class LlamaAdaptiveRMSNorm(nn.Module):
-    def __init__(self, hidden_size=1024, eps=1e-6, dim_cond=1024):
+    def __init__(self, hidden_size=1024, eps=1e-9, dim_cond=1024):
         super().__init__()
         self.to_weight = nn.Linear(dim_cond, hidden_size)
-        nn.init.zeros_(self.to_weight.weight)
-        nn.init.ones_(self.to_weight.bias)
+        nn.init.normal_(self.to_weight.weight, mean=0.0, std=0.02)
+        # nn.init.zeros_(self.to_weight.weight)
+        # nn.init.ones_(self.to_weight.bias)
         self.variance_epsilon = eps
         self._is_hf_initialized = True # disable automatic init
 

@@ -4,7 +4,6 @@ import numpy as np
 import time
 from .valle_ar_trainer import ValleARTrainer, make_pad_mask
 
-# TODO: variable prompt len
 class ValleNARTrainer(ValleARTrainer):
     def __init__(self, args=None, cfg=None):
         super().__init__(args, cfg)
@@ -75,6 +74,19 @@ class ValleNARTrainer(ValleARTrainer):
             target_mask=speech_mask,
         )
         loss = out.loss
+        
+        self.accelerator.log(
+            {f"Train/NAR L{out.target_quantization_layer} Top1 acc": out.top1_acc},
+            step=self.step,
+        )
+        self.accelerator.log(
+            {f"Train/NAR L{out.target_quantization_layer} Top5 acc": out.top5_acc},
+            step=self.step,
+        )
+        self.accelerator.log(
+            {f"Train/NAR L{out.target_quantization_layer} Top10 acc": out.top10_acc},
+            step=self.step,
+        )
 
         # if hasattr(out, 'top1_acc'):
         #     idx = out.target_quantization_layer

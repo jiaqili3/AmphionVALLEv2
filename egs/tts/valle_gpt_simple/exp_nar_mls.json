@@ -1,6 +1,6 @@
 {
     "model_type": "valle_simple_nar",
-    "log_dir": "/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple",
+    "log_dir": "/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple",
     "train": {
         "gradient_accumulation_step": 1,
         "find_unused_parameters": true,
@@ -20,13 +20,8 @@
           "name": "mls"
         },
         "optimizer": "adamw",
-        "adam": {
-          "betas": [0.9, 0.98],
-          "eps": 1e-9,
-          "lr": 2e-4
-        },
         "adamw": {
-          "lr": 3.5e-4
+          "lr": 1e-4
         },
         "scheduler": {
           "warmup_steps": 25000,
@@ -37,8 +32,8 @@
           "gamma": 0.999999
         },
         "batch_size": 5,
-        "max_tokens": 10500,
-        "max_sentences": 64,
+        "max_tokens": 8000,
+        "max_sentences": 12,
         "random_seed": 0
     }, 
     "trans_exp": {
@@ -58,7 +53,8 @@
       "bos_phone_id": 1127,
       "eos_phone_id": 1128,
       "bos_prompt_id": 1129,
-      "eos_prompt_id": 1130
+      "eos_prompt_id": 1130,
+      "num_hidden_layers": 16
     }
     }
   
