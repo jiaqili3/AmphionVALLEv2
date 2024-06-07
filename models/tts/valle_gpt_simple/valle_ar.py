@@ -1,5 +1,5 @@
 # python -m models.tts.valle_gpt.valle_ar
-from transformers import LlamaConfig, LlamaForCausalLM, LlamaModel
+from .modeling_llama import LlamaConfig, LlamaForCausalLM, LlamaModel
 import torch
 import torch.nn.functional as F
 import numpy as np
