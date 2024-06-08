@@ -6,7 +6,9 @@ import torch.nn.functional as F
 import numpy as np
 import os
 import torch.nn as nn
-
+from transformers.cache_utils import Cache
+from einops import rearrange
+import tqdm
 def initialize_weights(module):
     if isinstance(module, nn.Linear):
         module.weight.data.normal_(mean=0.0, std=0.02)
@@ -221,11 +223,19 @@ class ValleAR(nn.Module):
         target_label = target_ids * target_mask + (-100) * (1 - target_mask) # loss for target is computed on unmasked tokens
         return target_ids, target_mask, target_label
 
+    def get_emb(self, phone_ids, target_ids):
+        phone_embs = self.emb_text(phone_ids)
+        emb_code = [self.emb_code[i](target_ids[i]) for i in range(self.num_prediction_heads)]
+        emb_code = torch.stack(emb_code, 2).sum(2) # [B, T, H]
+        return torch.cat([phone_embs, emb_code], 1)
+
+    @torch.no_grad()
     def generate(
         self, 
         # emb, 
         phone_ids, # [B,T]
         prompt_ids, # [Q,B,T]
+        phone_mask=None,
         max_length=2000,
         temperature=1.0,
         top_k=100,
@@ -239,27 +249,200 @@ class ValleAR(nn.Module):
         infer_text=False,
         return_attn=False,
         return_hidden=False,
+        return_dict=False,
+        include_prompt=False,
     ):
+        prompt_ids = prompt_ids[:self.num_prediction_heads]
+        eos_token = self.eos_target_id
         model_input = {}
-        
-        # embed phone ids
-        phone_ids, phone_mask, phone_label = self.add_phone_eos_bos_label(
+        if phone_mask is None:
+            phone_mask = torch.ones_like(phone_ids, dtype=torch.long)
+        phone_ids, phone_mask, _ = self.add_phone_eos_bos_label(
             phone_ids,
-            torch.ones_like(phone_ids),
+            phone_mask,
             self.eos_phone_id,
             self.bos_phone_id,
             self.pad_token_id,
         )
         phone_ids = phone_ids - self.target_vocab_size # since we added this in the inner function
         
-        emb_text = self.emb_text(phone_ids)
+        emb = self.get_emb(phone_ids, prompt_ids)
         
-        # embed the prompt codes
-        emb_code = [self.emb_code[i](prompt_ids[i]) for i in range(self.num_prediction_heads)]
-        emb_code = torch.stack(emb_code, 2).sum(2)
+        attentions = []
+        hiddens = []
         
-        attention_mask = torch.cat([phone_mask, torch.ones_like(prompt_ids[0])], 1)
+        finish = torch.zeros(phone_ids.shape[0], device=phone_ids.device).bool()
         
+        # temperature = temperature[None].expand(phone_ids.shape[0], -1)
+        # temperature = rearrange(temperature, "b n -> (b n) 1")
+
+        # attention_mask_cache = torch.ones((inputs_ids.shape[0], inputs_ids.shape[1]+max_new_token,), dtype=torch.bool, device=inputs_ids.device)
+        # if attention_mask is not None:
+        #     attention_mask_cache[:, :attention_mask.shape[1]] = attention_mask
+        
+        start_idx = prompt_ids.shape[-1]
+        end_idx = torch.zeros(prompt_ids.shape[-1], device=prompt_ids.device, dtype=torch.long)
+        
+        for i in tqdm.tqdm(range(max_new_token)):
+    
+            # model_input = self.prepare_inputs_for_generation(inputs_ids, 
+            #     outputs.past_key_values if i!=0 else None, 
+            #     attention_mask_cache[:, :inputs_ids.shape[1]], use_cache=True)
+            model_input['past_key_values'] = outputs.past_key_values if i!=0 else None
+            model_input['use_cache'] = True
+        
+            if i == 0:
+                model_input['inputs_embeds'] = emb
+            else:
+                emb = self.get_emb(phone_ids, prompt_ids)
+                model_input['inputs_embeds'] = emb
+            
+            model_input['input_ids'] = None
+            outputs = self.model.forward(**model_input, output_attentions=return_attn)
+            attentions.append(outputs.attentions)
+            hidden_states = outputs[0] 
+            if return_hidden:
+                hiddens.append(hidden_states[:, -1])
+
+            logits = torch.stack([self.predict_layer[i](hidden_states) for i in range(self.num_prediction_heads)], 3)
+            # logits: [B, T, H, Q]
+            logits = logits[:, -1].float()
+            
+            logits = rearrange(logits, "b c n -> (b n) c")
+
+            logits = logits / temperature
+            
+            logits_token = prompt_ids[0,:,start_idx:] # for repetition penalty calc
+            
+            for logitsProcessors in LogitsProcessors:
+                logits = logitsProcessors(logits_token, logits)
+                    
+            for logitsWarpers in LogitsWarpers:
+                logits = logitsWarpers(logits_token, logits)
+            
+            if i < min_new_token:
+                logits[:, eos_token] = -torch.inf
+                
+            
+            scores = torch.softmax(logits, dim=-1)
+        
+            idx_next = torch.multinomial(scores, num_samples=1)
+            
+            idx_next = rearrange(idx_next, "(b q) 1 -> b q 1", q=self.num_prediction_heads)
+            idx_next = rearrange(idx_next, "b q 1 -> q b 1")
+            finish = finish | (idx_next == eos_token).any(1)
+            if finish.any():
+                # if any vq layer prediction finishes, break out
+                break
+            prompt_ids = torch.cat([prompt_ids, idx_next], -1)
+            
+            end_idx = end_idx + (~finish).int()
+
+        
+        if return_hidden:
+            hiddens = torch.stack(hiddens, 1)
+            hiddens = [hiddens[idx, :i] for idx, i in enumerate(end_idx.int())]
+                
+        if not finish.all():
+            print(f'Incomplete result. Not all are finished')    
+            # print(f'Incomplete result. hit max_new_token: {max_new_token}')    
+        
+        if not include_prompt:
+            prompt_ids = prompt_ids[:, start_idx:]
+        
+        if not return_dict:
+            return prompt_ids
+        else:  
+            return {
+                'ids': prompt_ids, 
+                'attentions': attentions,
+                'hiddens':hiddens,
+            }
+        
+        
+        
+    # def prepare_inputs_for_generation(
+    #     self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
+    # ):
+    #     '''input_ids: [B,T,Q]'''
+    #     # With static cache, the `past_key_values` is None
+    #     # TODO joao: standardize interface for the different Cache classes and remove of this if
+    #     has_static_cache = False
+    #     if past_key_values is None:
+    #         past_key_values = getattr(self.gpt.layers[0].self_attn, "past_key_value", None)
+    #         has_static_cache = past_key_values is not None
+
+    #     past_length = 0
+    #     if past_key_values is not None:
+    #         if isinstance(past_key_values, Cache):
+    #             past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+    #             max_cache_length = (
+    #                 torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+    #                 if past_key_values.get_max_length() is not None
+    #                 else None
+    #             )
+    #             cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+    #         # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
+    #         else:
+    #             cache_length = past_length = past_key_values[0][0].shape[2]
+    #             max_cache_length = None
+
+    #         # Keep only the unprocessed tokens:
+    #         # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+    #         # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+    #         # input)
+    #         if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+    #             input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+    #         # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+    #         # input_ids based on the past_length.
+    #         elif past_length < input_ids.shape[1]:
+    #             input_ids = input_ids[:, past_length:]
+    #         # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+    #         # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+    #         if (
+    #             max_cache_length is not None
+    #             and attention_mask is not None
+    #             and cache_length + input_ids.shape[1] > max_cache_length
+    #         ):
+    #             attention_mask = attention_mask[:, -max_cache_length:]
+
+    #     position_ids = kwargs.get("position_ids", None)
+    #     if attention_mask is not None and position_ids is None:
+    #         # create position_ids on the fly for batch generation
+    #         position_ids = attention_mask.long().cumsum(-1) - 1
+    #         position_ids.masked_fill_(attention_mask == 0, 1)
+    #         if past_key_values:
+    #             position_ids = position_ids[:, -input_ids.shape[1] :]
+
+    #     # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+    #     if inputs_embeds is not None and past_key_values is None:
+    #         model_inputs = {"inputs_embeds": inputs_embeds}
+    #     else:
+    #         # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+    #         # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
+    #         # TODO: use `next_tokens` directly instead.
+    #         model_inputs = {"input_ids": input_ids.contiguous()}
+
+    #     input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+    #     if cache_position is None:
+    #         cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+    #     else:
+    #         cache_position = cache_position[-input_length:]
+
+    #     if has_static_cache:
+    #         past_key_values = None
+
+    #     model_inputs.update(
+    #         {
+    #             "position_ids": position_ids,
+    #             "cache_position": cache_position,
+    #             "past_key_values": past_key_values,
+    #             "use_cache": kwargs.get("use_cache"),
+    #             "attention_mask": attention_mask,
+    #         }
+    #     )
+    #     return model_inputs
 
     def sample_hf(
         self,
@@ -361,8 +544,10 @@ def test():
         print(f"iter={i}, {loss}.")
     
     phone_ids = torch.LongTensor([1,2,3]).reshape(1,-1)
-    target_ids = torch.LongTensor([765, 234]).reshape(1,-1)
-    sampled = model.sample_hf(phone_ids, target_ids)
+    target_ids = torch.LongTensor([765, 234]).expand(2, 1,-1)
+    sampled = model.generate(phone_ids, target_ids)
+    
+    print(sampled)
 
     breakpoint()
 
