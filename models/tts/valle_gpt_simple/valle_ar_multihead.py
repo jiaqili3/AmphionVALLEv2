@@ -31,7 +31,7 @@ class ValleAR(nn.Module):
         num_attention_heads=16,
         pad_token_id=1281,
         bos_target_id=1282,
-        eos_target_id=1283,
+        eos_target_id=1025,
         bos_phone_id=1284,
         eos_phone_id=1285,
         use_input_embeds=False,
@@ -95,13 +95,13 @@ class ValleAR(nn.Module):
         # embed the phone
         emb_text = self.emb_text(phone_ids)
         
-        # target_ids, target_mask, target_label = self.add_target_eos_bos_label(
-        #     target_ids,
-        #     target_mask,
-        #     self.eos_target_id,
-        #     self.bos_target_id,
-        #     self.pad_token_id,
-        # )
+        # pad eos token in the code
+        target_ids, target_mask, target_labels = self.add_target_eos_label(
+            target_ids,
+            target_mask,
+            self.eos_target_id,
+            pad_token_id = 0,
+        )
         
         # embed the target
         emb_code = [self.emb_code[i](target_ids[i]) for i in range(self.num_prediction_heads)]
@@ -117,7 +117,7 @@ class ValleAR(nn.Module):
         model_input['attention_mask'] = attention_mask
         
         # process `target_ids`
-        target_ids = target_ids * target_mask + (-100) * (1-target_mask)
+        # target_ids = target_ids * target_mask + (-100) * (1-target_mask)
         
         # input_token_ids = torch.cat([phone_ids, target_ids], dim=-1)
         # attention_mask = torch.cat([phone_mask, target_mask], dim=-1)
@@ -136,7 +136,7 @@ class ValleAR(nn.Module):
         target_len = target_ids.shape[-1] # length of audio codes
         
         for i in range(self.num_prediction_heads):
-            labels = target_ids[i]
+            labels = target_labels[i]
             # Shift so that tokens < n predict n
             shift_logits = logits[i][..., -target_len:-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -191,6 +191,20 @@ class ValleAR(nn.Module):
         phone_label = -100 * torch.ones_like(phone_ids) # loss for entire phone is not computed (passed to llama)
         return phone_ids, phone_mask, phone_label
 
+    def add_target_eos_label(
+        self, target_ids, target_mask, target_eos_id, pad_token_id
+    ):
+        '''add eos token to the audio codes'''
+        # target_ids: [Q, B, T]
+        # target_mask: [B, T]
+        target_ids = target_ids * target_mask.expand(target_ids.shape[0], -1, -1)
+        target_ids = F.pad(target_ids, (0, 1), value=0) + target_eos_id * F.pad(
+            1 - target_mask, (0, 1), value=1
+        ).expand(target_ids.shape[0], -1, -1)
+        target_mask = F.pad(target_mask, (1, 0), value=1)
+        target_ids = target_ids * target_mask + pad_token_id * (1 - target_mask)
+        target_label = target_ids * target_mask + (-100) * (1 - target_mask) # loss for target is computed on unmasked tokens
+        return target_ids, target_mask, target_label
     def add_target_eos_bos_label(
         self, target_ids, target_mask, target_eos_id, target_bos_id, pad_token_id
     ):
@@ -206,6 +220,46 @@ class ValleAR(nn.Module):
         target_mask = F.pad(target_mask, (1, 0), value=1)
         target_label = target_ids * target_mask + (-100) * (1 - target_mask) # loss for target is computed on unmasked tokens
         return target_ids, target_mask, target_label
+
+    def generate(
+        self, 
+        # emb, 
+        phone_ids, # [B,T]
+        prompt_ids, # [Q,B,T]
+        max_length=2000,
+        temperature=1.0,
+        top_k=100,
+        top_p=0.9,
+        repeat_penalty=1.0,
+        attention_mask = None,
+        max_new_token = 2048, 
+        min_new_token = 0,
+        LogitsWarpers = [],
+        LogitsProcessors = [],
+        infer_text=False,
+        return_attn=False,
+        return_hidden=False,
+    ):
+        model_input = {}
+        
+        # embed phone ids
+        phone_ids, phone_mask, phone_label = self.add_phone_eos_bos_label(
+            phone_ids,
+            torch.ones_like(phone_ids),
+            self.eos_phone_id,
+            self.bos_phone_id,
+            self.pad_token_id,
+        )
+        phone_ids = phone_ids - self.target_vocab_size # since we added this in the inner function
+        
+        emb_text = self.emb_text(phone_ids)
+        
+        # embed the prompt codes
+        emb_code = [self.emb_code[i](prompt_ids[i]) for i in range(self.num_prediction_heads)]
+        emb_code = torch.stack(emb_code, 2).sum(2)
+        
+        attention_mask = torch.cat([phone_mask, torch.ones_like(prompt_ids[0])], 1)
+        
 
     def sample_hf(
         self,
