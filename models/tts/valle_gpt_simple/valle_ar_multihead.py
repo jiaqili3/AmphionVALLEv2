@@ -7,6 +7,18 @@ import numpy as np
 import os
 import torch.nn as nn
 
+def initialize_weights(module):
+    if isinstance(module, nn.Linear):
+        module.weight.data.normal_(mean=0.0, std=0.02)
+        if module.bias is not None:
+            module.bias.data.zero_()
+    elif isinstance(module, nn.Embedding):
+        module.weight.data.normal_(mean=0.0, std=0.02)
+        if module.padding_idx is not None:
+            module.weight.data[module.padding_idx].zero_()
+    elif isinstance(module, nn.LayerNorm):
+        module.bias.data.zero_()
+        module.weight.data.fill_(1.0)
 
 class ValleAR(nn.Module):
     def __init__(
@@ -61,6 +73,11 @@ class ValleAR(nn.Module):
                 nn.Sequential(nn.Linear(hidden_size, 768), nn.GELU(), nn.Linear(768, target_vocab_size)) for _ in range(num_prediction_heads)
             ]
         )
+        
+        self.emb_text.apply(initialize_weights)
+        self.emb_code.apply(initialize_weights)
+        self.predict_layer.apply(initialize_weights)
+        
 
     def forward(
         self, phone_ids, phone_mask, target_ids, target_mask
