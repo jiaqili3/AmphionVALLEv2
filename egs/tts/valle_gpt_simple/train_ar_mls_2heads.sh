@@ -41,13 +41,13 @@ python setup.py build_ext --inplace
 cd $work_dir
 
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_nar_mls.json
+    exp_config="${exp_dir}"/exp_ar_mls_2heads.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="nar_mls"
+exp_name="ar_mls_2heads"
 
-port=17004
+port=53333
 
 
 ######## Train Model ###########
@@ -58,13 +58,10 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --exp_name $exp_name \
     --log_level debug \
     --seed $RANDOM \
-    --resume \
-    --resume_type "resume"
-
+    # --resume \
+    # --resume_type "resume"
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
-# to run inference, you would need the "pytorch_model.bin" file
-
 sleep 60
 
 echo "Resuming......"
