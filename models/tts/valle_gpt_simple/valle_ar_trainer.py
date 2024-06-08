@@ -60,6 +60,17 @@ class ValleARTrainer(BaseTrainer):
         self.top1_accuracies = []
         self.top5_accuracies = []
         self.top10_accuracies = []
+        
+        if hasattr(self.cfg, 'flatten_first_2_layers'):
+            self.flatten_first_2_layers = self.cfg.flatten_first_2_layers
+            print('flattened:',self.flatten_first_2_layers)
+        else:
+            self.flatten_first_2_layers = False
+            
+        if hasattr(self.cfg, 'num_prediction_heads'):
+            self.num_prediction_heads = self.cfg.num_prediction_heads
+            print('num_prediction_heads:',self.num_prediction_heads)
+            
     def _accelerator_prepare(self):
         # if self.accelerator.is_main_process:
         #     breakpoint()
@@ -85,7 +96,10 @@ class ValleARTrainer(BaseTrainer):
 
 
     def _build_model(self):
-        from .valle_ar import ValleAR
+        if hasattr(self.cfg.model, 'num_prediction_heads'):
+            from .valle_ar_multihead import ValleAR
+        else:
+            from .valle_ar import ValleAR
         return ValleAR(**self.cfg.model)
 
     def _train_step(self, batch):
@@ -107,13 +121,22 @@ class ValleARTrainer(BaseTrainer):
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//320]
-            batch['speech'] = vq_id[0] # use first layer
-        batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
-        assert batch['speech_len'].max() <= batch['speech'].shape[1]
+            if self.flatten_first_2_layers:
+                first_layer = vq_id[0]
+                second_layer = vq_id[1]
+                # flatten the first two layers
+                batch['speech'] = torch.stack([first_layer, second_layer], dim=-1).flatten(-2,-1)
+                batch['speech_len'] = batch['speech_len'] // 160
+            elif hasattr(self.cfg.model, 'num_prediction_heads'):
+                batch['speech'] = vq_id[:2] # first two layers
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+            else:
+                batch['speech'] = vq_id[0] # use first layer
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+        assert batch['speech_len'].max() <= batch['speech'].shape[-1]
 
-        assert batch['phone_ids'][0, -1] != 0
 
-        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=True).to(torch.long)
+        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=False).to(torch.long)
         speech_mask = 1 - make_pad_mask(batch['speech_len'], max_len=batch['speech'].size(1)).to(torch.long)
 
         out = self.model(

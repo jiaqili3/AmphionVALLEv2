@@ -51,30 +51,21 @@ class ValleAR(nn.Module):
         self.model.embed_tokens = None
         
         self.num_prediction_heads = num_prediction_heads
+        print(f"num_prediction_heads={num_prediction_heads}")
         
         self.emb_text = nn.Embedding(phone_vocab_size+10, hidden_size)
         self.emb_code = nn.ModuleList([nn.Embedding(target_vocab_size, hidden_size) for i in range(num_prediction_heads)])
         
         self.predict_layer = nn.ModuleList(
             [
-                nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.GELU(), nn.Linear(hidden_size, target_vocab_size)) for _ in range(num_prediction_heads)
+                nn.Sequential(nn.Linear(hidden_size, 768), nn.GELU(), nn.Linear(768, target_vocab_size)) for _ in range(num_prediction_heads)
             ]
         )
 
-        self.use_input_embeds = use_input_embeds
-
-        # no input embedding is used to provide speaker information
-        if self.use_input_embeds:
-            self.emb_linear = nn.Linear(emb_dim, hidden_size)
-            self.emb_linear.weight.data.normal_(mean=0.0, std=0.01)
-            self.emb_linear.bias.data.zero_()
-
     def forward(
-        self, phone_ids, phone_mask, target_ids, target_mask, input_embeds=None
+        self, phone_ids, phone_mask, target_ids, target_mask
     ):
         '''target_ids: [Q, B, T]'''
-        if input_embeds is not None:
-            input_embeds = self.emb_linear(input_embeds)
         phone_ids, phone_mask, phone_label = self.add_phone_eos_bos_label(
             phone_ids,
             phone_mask,
