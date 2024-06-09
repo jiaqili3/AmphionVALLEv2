@@ -17,12 +17,17 @@ import io
 from multiprocessing import Pool, Lock
 NUM_WORKERS=32
 lock = Lock()
-SAMPLE_RATE=24000
+SAMPLE_RATE=16000
 def get_duration(file_path):
     duration = librosa.get_duration(path=file_path, sr=SAMPLE_RATE)
     return file_path, duration
 # g2p
-from utils.g2p.g2p import phonemizer_g2p
+# from utils.g2p.g2p import phonemizer_g2p
+
+# override g2p with g2p_en library
+from .g2p_processor import G2pProcessor
+phonemizer_g2p = G2pProcessor()
+
 # lang2token ={
 #     'zh': "[ZH]", 
 #     'ja':"[JA]", 
@@ -63,6 +68,7 @@ class VALLEDataset(Dataset):
             assert SAMPLE_RATE == 24000
             print(f'Using 24k resampling.')
 
+        print(f'data sampling rate is {SAMPLE_RATE}')
 
         self.dataset2dir = {
             'mls_train': 'public-dataset-p2:s3://public-dataset-p2/Multilingual-LibriSpeech/data_0321/unzip/mls_english1/train/audio',
@@ -269,7 +275,7 @@ class VALLEDataset(Dataset):
         # get_num_frames(durations) by index
         duration = self.meta_data_cache['duration'][index]
         # num_frames = duration * SAMPLE_RATE
-        num_frames = int(duration * 75)
+        num_frames = int(duration * 50)
 
         # file_rel_path = self.meta_data_cache['relpath'][index]
         # uid = file_rel_path.rstrip('.flac').split('/')[-1]
