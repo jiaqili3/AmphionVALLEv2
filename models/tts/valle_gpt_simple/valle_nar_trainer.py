@@ -51,14 +51,30 @@ class ValleNARTrainer(ValleARTrainer):
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
+                
+
         with torch.no_grad():
-            vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-            vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+            if self.cfg.use_speechtokenizer:
+                # Extract discrete codes from SpeechTokenizer
+                # 16k
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,T] -> (n_q, B, T)
+                # RVQ_1 = codes[:1, :, :] # Contain content info, can be considered as semantic tokens
+                # RVQ_supplement = codes[1:, :, :] # Contain timbre info, complete info lost by the first quantizer
+                # Concatenating semantic tokens (RVQ_1) and supplementary timbre tokens and then decoding
+                # wav = self.codec_encoder.decode(vq_id)
+                # torchaudio.save('a.wav', wav[0].cpu(), 16000)
+
+                # # Decoding from RVQ-i:j tokens from the ith quantizers to the jth quantizers
+                # wav = model.decode(codes[i: (j + 1)], st=i) 
+            else:
+                # using encodec, 24k
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
             
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//320]
-            batch['speech'] = vq_id # use first layer
+            batch['speech'] = vq_id
         batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
         assert batch['speech_len'].max() <= batch['speech'].shape[-1]
 
@@ -67,11 +83,17 @@ class ValleNARTrainer(ValleARTrainer):
 
         np.random.seed(int(time.time()) - 5*self.accelerator.process_index)
 
+        if hasattr(self.cfg.train, 'dropout'):
+            dropout = self.cfg.train.dropout
+        else:
+            dropout = 0.0
+
         out = self.model(
             phone_ids = batch['phone_ids'],
             phone_mask=phone_mask,
             target_ids = batch['speech'],
             target_mask=speech_mask,
+            dropout=dropout
         )
         loss = out.loss
         
@@ -114,6 +136,8 @@ class ValleNARTrainer(ValleARTrainer):
         with torch.no_grad():
             vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
             vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+            # recovered_audio = self.codec_encoder.decode([(vq_id.transpose(0,1), None)])
+            breakpoint()
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//200]
@@ -122,20 +146,21 @@ class ValleNARTrainer(ValleARTrainer):
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # recovered_audio.shape: torch.Size([1, 1, 50200])
 
-            batch['speech'] = vq_id[0] # use first layer
+            batch['speech'] = vq_id 
 
             # save gt
             recovered_audio = self.codec_encoder.decode([(vq_id.transpose(0,1), None)])
             torchaudio.save('gt.wav', recovered_audio[0].cpu(), 24000)
 
             out_vq_ids = self.model.sample_hf(
-                batch['phone_ids'],
-                batch['speech'][:, :225],
+                phone_ids=batch['phone_ids'],
+                prompt_ids=batch['speech'][..., :225],
+                first_stage_ids=batch['speech'][0, :, 225:],
             )
-            out_vq_ids = torch.cat([batch['speech'][:, :225], out_vq_ids], dim=1)
+            # breakpoint()
+            # out_vq_ids = torch.cat([batch['speech'][:, :225], out_vq_ids], dim=1)
 
-            breakpoint()
             # reconstruct form tokens
-            recovered_audio = self.codec_encoder.decode([(out_vq_ids.unsqueeze(0), None)])
+            recovered_audio = self.codec_encoder.decode([(out_vq_ids.transpose(0,1)[:1], None)])
             torchaudio.save('a.wav', recovered_audio[0].cpu(), 24000)
             breakpoint()
