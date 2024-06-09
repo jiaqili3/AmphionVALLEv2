@@ -237,7 +237,7 @@ class ValleAR(nn.Module):
         prompt_ids, # [Q,B,T]
         phone_mask=None,
         max_length=2000,
-        temperature=1.0,
+        temperature=0.5,
         top_k=100,
         top_p=0.9,
         repeat_penalty=1.0,
@@ -284,7 +284,6 @@ class ValleAR(nn.Module):
         end_idx = torch.zeros(prompt_ids.shape[-1], device=prompt_ids.device, dtype=torch.long)
         
         for i in tqdm.tqdm(range(max_new_token)):
-    
             # model_input = self.prepare_inputs_for_generation(inputs_ids, 
             #     outputs.past_key_values if i!=0 else None, 
             #     attention_mask_cache[:, :inputs_ids.shape[1]], use_cache=True)
@@ -348,7 +347,7 @@ class ValleAR(nn.Module):
             # print(f'Incomplete result. hit max_new_token: {max_new_token}')    
         
         if not include_prompt:
-            prompt_ids = prompt_ids[:, start_idx:]
+            prompt_ids = prompt_ids[..., start_idx:] # [Q,B,T]
         
         if not return_dict:
             return prompt_ids
@@ -518,12 +517,10 @@ class ValleAR(nn.Module):
 def test():
     model = ValleAR(num_prediction_heads=2)
 
-    phone_ids = torch.LongTensor([[1,2,3,4,5,0],
-                                  [1,2,3,4,5,6]])
-    phone_mask = torch.LongTensor([[1,1,1,0,0,0],
-                                   [1,1,1,0,0,0]])
-    target_ids = torch.LongTensor([765, 234, 123, 234, 123,599]).expand(2, 2,-1)
-    target_mask = torch.LongTensor([1,1,1,1,0,0]).expand(2,-1)
+    phone_ids = torch.LongTensor([[1,2,3,4,5,0]])
+    phone_mask = torch.LongTensor([[1,1,1,0,0,0]])
+    target_ids = torch.LongTensor([[765, 234, 123, 234, 123,599],[765, 234, 894, 234, 238,599]]).unsqueeze(1)
+    target_mask = torch.LongTensor([[1,1,1,1,1,1]])
 
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
