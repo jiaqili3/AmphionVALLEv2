@@ -58,8 +58,9 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --exp_name $exp_name \
     --log_level debug \
     --seed $RANDOM \
-    # --resume \
-    # --resume_type "resume"
+    --resume \
+    --resume_type "resume" \
+    $1
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
 sleep 60

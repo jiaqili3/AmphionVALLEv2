@@ -1,16 +1,17 @@
 {
-    "model_type": "valle_simple_ar",
-    "log_dir": "/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple",
+    "model_type": "valle_simple_nar",
+    "log_dir": "/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple",
+    "use_speechtokenizer": true,
     "train": {
         "gradient_accumulation_step": 1,
-        "find_unused_parameters": false,
+        "find_unused_parameters": true,
         "tracker": ["tensorboard"],
         "max_epoch": 1000,
         "save_checkpoint_stride": [2000],
         "keep_last": [1],
         "run_eval": [true],
         "dataloader": {
-          "num_worker": 32,
+          "num_worker": 8,
           "pin_memory": true,
           "persistent_workers": true
         },
@@ -19,18 +20,12 @@
           "use_dynamic_batchsize": true,
           "name": "mls"
         },
-        "optimizer": "adamW",
-        "adam": {
-          "betas": [0.9, 0.98],
-          "eps": 1e-9,
-          "lr": 4e-4,
-          "weight_decay": 0.01
-        },
+        "optimizer": "adamw",
         "adamw": {
-          "lr": 2e-4
+          "lr": 3e-4
         },
         "scheduler": {
-          "warmup_steps": 20000,
+          "warmup_steps": 25000,
           "total_steps": 800000,
           "min_lr": 1e-5
         },
@@ -38,8 +33,8 @@
           "gamma": 0.999999
         },
         "batch_size": 5,
-        "max_tokens": 8500,
-        "max_sentences": 64,
+        "max_tokens": 11000,
+        "max_sentences": 12,
         "random_seed": 0
     }, 
     "trans_exp": {
@@ -51,16 +46,16 @@
       "content_model_path": "/mnt/petrelfs/hehaorui/data/pretrained_ckpts/mhubert"
     },
     "model": {
-      "phone_vocab_size": 100,
+      "phone_vocab_size": 300,
       "target_vocab_size": 1024,
-      "eos_target_id": 1025,
-      "pad_token_id": 1124,
-      "bos_target_id": 1125,
-      "bos_phone_id": 1127,
-      "eos_phone_id": 1128,
-      "bos_prompt_id": 1129,
-      "eos_prompt_id": 1130,
-      "num_prediction_heads": 2,
+      "pad_token_id": 1324,
+      "bos_target_id": 1325,
+      "eos_target_id": 1326,
+      "bos_phone_id": 1327,
+      "eos_phone_id": 1328,
+      "bos_prompt_id": 1329,
+      "eos_prompt_id": 1330,
       "num_hidden_layers": 16
     }
     }
+  

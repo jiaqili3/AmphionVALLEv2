@@ -41,11 +41,11 @@ python setup.py build_ext --inplace
 cd $work_dir
 
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_nar_mls.json
+    exp_config="${exp_dir}"/exp_nar_mls_speechtokenizer.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="nar_mls"
+exp_name="nar_mls_speechtokenizer"
 
 port=17004
 
@@ -58,8 +58,8 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --exp_name $exp_name \
     --log_level debug \
     --seed $RANDOM \
-    --resume \
-    --resume_type "resume"
+    # --resume \
+    # --resume_type "resume"
 
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
