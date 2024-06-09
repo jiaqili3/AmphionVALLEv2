@@ -54,7 +54,7 @@ class ValleInference(torch.nn.Module):
             ckpt_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
             self.codec_encoder = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
             self.codec_encoder.eval()
-            self.codec_encoder.to(self.accelerator.device)
+            self.codec_encoder.to(device)
             print(f'Loaded SpeechTokenizer from {config_path} and {ckpt_path}')
         else:
             # use Encodec
@@ -107,16 +107,16 @@ class ValleInference(torch.nn.Module):
             # typically we only require one config in the chunk, 
             # but we can also use multiple configs to, for example, use different sampling temperature at different positions
             for chunk in chunk_configs:
-                ar_vq_ids = self.ar_model.sample_hf(
-                    batch['phone_ids'],
-                    vq_id[0, :, :150],
-                    top_p=chunk['top_p'],
-                    top_k=chunk['top_k'],
-                    temperature=chunk['temperature'],
-                    num_beams=chunk['num_beams'],
-                    repeat_penalty=chunk['repeat_penalty'],
-                    max_length=chunk['max_length'],
-                )
+                # ar_vq_ids = self.ar_model.sample_hf(
+                #     batch['phone_ids'],
+                #     vq_id[0, :, :150],
+                #     top_p=chunk['top_p'],
+                #     top_k=chunk['top_k'],
+                #     temperature=chunk['temperature'],
+                #     num_beams=chunk['num_beams'],
+                #     repeat_penalty=chunk['repeat_penalty'],
+                #     max_length=chunk['max_length'],
+                # )
                 # recovered_audio_ar = self.decode(ar_vq_ids.unsqueeze(0))
                 # torchaudio.save('recovered_audio_ar.wav', recovered_audio_ar[0].cpu(), 24000)
 
