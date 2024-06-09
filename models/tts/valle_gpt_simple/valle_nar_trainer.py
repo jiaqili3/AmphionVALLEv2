@@ -134,10 +134,18 @@ class ValleNARTrainer(ValleARTrainer):
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
         with torch.no_grad():
-            vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-            vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+            if self.cfg.use_speechtokenizer:
+                # Extract discrete codes from SpeechTokenizer
+                # 16k
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,T] -> (n_q, B, T)
+                # Concatenating semantic tokens (RVQ_1) and supplementary timbre tokens and then decoding
+                # wav = self.codec_encoder.decode(vq_id)
+                # torchaudio.save('a.wav', wav[0].cpu(), 16000)
+
+            else:
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
             # recovered_audio = self.codec_encoder.decode([(vq_id.transpose(0,1), None)])
-            breakpoint()
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//200]
@@ -149,18 +157,24 @@ class ValleNARTrainer(ValleARTrainer):
             batch['speech'] = vq_id 
 
             # save gt
-            recovered_audio = self.codec_encoder.decode([(vq_id.transpose(0,1), None)])
-            torchaudio.save('gt.wav', recovered_audio[0].cpu(), 24000)
-
+            if self.cfg.use_speechtokenizer:
+                recovered_audio = self.codec_encoder.decode(vq_id)
+            else:
+                recovered_audio = self.codec_encoder.decode([(vq_id.transpose(0,1), None)])
+            torchaudio.save('gt.wav', recovered_audio[0].cpu(), 16000)
+            self.model.eval()
             out_vq_ids = self.model.sample_hf(
-                phone_ids=batch['phone_ids'],
-                prompt_ids=batch['speech'][..., :225],
-                first_stage_ids=batch['speech'][0, :, 225:],
+                phone_ids=batch['phone_ids'][:1],
+                prompt_ids=batch['speech'][:, :1, :150],
+                first_stage_ids=batch['speech'][0, :1, 150:],
             )
             # breakpoint()
             # out_vq_ids = torch.cat([batch['speech'][:, :225], out_vq_ids], dim=1)
 
             # reconstruct form tokens
-            recovered_audio = self.codec_encoder.decode([(out_vq_ids.transpose(0,1)[:1], None)])
-            torchaudio.save('a.wav', recovered_audio[0].cpu(), 24000)
+            if self.cfg.use_speechtokenizer:
+                recovered_audio = self.codec_encoder.decode(out_vq_ids)
+            else:
+                recovered_audio = self.codec_encoder.decode([(out_vq_ids.transpose(0,1)[:1], None)])
+            torchaudio.save('a.wav', recovered_audio[0].cpu(), 16000)
             breakpoint()

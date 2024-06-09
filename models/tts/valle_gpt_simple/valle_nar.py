@@ -440,6 +440,7 @@ class ValleNAR(nn.Module):
             assert not self.training # inference stage fix prompt len to input
             NUM_PROMPT_TOKENS = prompt_len
         else:
+            assert self.training
             # randomly select a prompt length
             assert self.training # randomize prompt len in training
             NUM_PROMPT_TOKENS = np.random.randint(
