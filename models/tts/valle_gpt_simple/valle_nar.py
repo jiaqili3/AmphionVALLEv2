@@ -398,12 +398,11 @@ class ValleNAR(nn.Module):
 
         self.phone_embedder = nn.Embedding(self.phone_vocab_size+10, hidden_size) # use phone_embedder to embed all eos, bos tokens
         self.prompt_embedder = MultiEmbedding(num_embeddings=self.target_vocab_size, embedding_dim=hidden_size, num_quantization_layers=NUM_QUANTIZERS)
-
         self.phone_embedder.weight.data.normal_(mean=0.0, std=0.02)
         
         # use linear mask schedule when training
         # another option is uniform
-        self.mask_layer_schedule = "linear"
+        self.mask_layer_schedule = "uniform"
 
         # no input embedding is used to provide speaker information
         if self.use_input_embeds:
@@ -413,13 +412,14 @@ class ValleNAR(nn.Module):
     
     def forward(
         self, phone_ids, phone_mask, target_ids, target_mask, 
-        target_quantization_layer=None, prompt_len=None,
+        target_quantization_layer=None, prompt_len=None, dropout=0.0,
     ):
         '''
         phone_ids: [B, T]
         phone_mask: [B, T]
         target_ids: [8,B,T]
         target_mask: [B, T]
+        dropout: rate of dropping out the target tokens
         '''
         assert (target_ids < 1024).all(), "target_ids should be less than 1024"
         phone_ids = phone_ids + self.target_vocab_size
@@ -482,6 +482,29 @@ class ValleNAR(nn.Module):
             # print(f'target layer: {target_quantization_layer}')
         # prompt of the target part
         target_prompt_ids = target_ids[:target_quantization_layer, :, NUM_PROMPT_TOKENS:]
+        def randomly_set_elements(tensor, fraction, value):
+            """
+            Randomly set a fraction of the elements in a tensor to a specific value.
+
+            Args:
+            tensor (torch.Tensor): The input tensor.
+            fraction (float): The fraction of elements to set to the specified value (between 0 and 1).
+            value (float or int): The value to set the elements to.
+
+            Returns:
+            torch.Tensor: The tensor with some elements set to the specified value.
+            """
+            # Create a mask with the same shape as the tensor
+            mask = torch.rand_like(tensor, dtype=torch.float32) < fraction
+            # Clone the tensor to avoid modifying the original tensor
+            result_tensor = tensor.clone()
+            # Set the elements where the mask is True to the specified value
+            result_tensor[mask] = value
+            return result_tensor
+
+        if dropout != 0.0:
+            target_prompt_ids = randomly_set_elements(target_prompt_ids, dropout, self.target_vocab_size)
+
         target_embedding = self.prompt_embedder(target_prompt_ids)
 
         # mask of the target part
@@ -597,7 +620,7 @@ def test():
     target_mask = torch.ones(1,250, dtype=torch.long).cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
-    for i in range(150):
+    for i in range(200):
         optimizer.zero_grad()
         out = model(
             phone_ids=phone_ids,
@@ -614,6 +637,8 @@ def test():
 
         print(f"iter={i}, {loss}.")
     target_ids_short = target_ids[:, :, :240]
+    
+    model.eval()
     sampled = model.sample_hf(phone_ids, prompt_ids=target_ids_short, first_stage_ids=target_ids[0, :, 240:])
 
     print(target_ids[:,:,-10:])
