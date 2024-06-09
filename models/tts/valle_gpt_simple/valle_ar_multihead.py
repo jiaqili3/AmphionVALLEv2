@@ -238,7 +238,7 @@ class ValleAR(nn.Module):
         phone_mask=None,
         max_length=2000,
         temperature=0.5,
-        top_k=100,
+        top_k=20,
         top_p=0.9,
         repeat_penalty=1.0,
         attention_mask = None,
@@ -252,6 +252,7 @@ class ValleAR(nn.Module):
         return_dict=False,
         include_prompt=False,
     ):
+        from utils.topk_sampling import top_k_top_p_filtering
         prompt_ids = prompt_ids[:self.num_prediction_heads]
         eos_token = self.eos_target_id
         model_input = {}
@@ -310,6 +311,9 @@ class ValleAR(nn.Module):
             logits = rearrange(logits, "b c n -> (b n) c")
 
             logits = logits / temperature
+            
+            # top p and top k sampling
+            logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
             
             logits_token = prompt_ids[0,:,start_idx:] # for repetition penalty calc
             

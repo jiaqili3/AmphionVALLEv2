@@ -9,54 +9,37 @@ import torch.nn.functional as F
 
 
 # This function is modified from https://github.com/microsoft/unilm/blob/master/xtune/src/transformers/modeling_utils.py
-def top_k_top_p_filtering(
-    logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1
-):
+def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
+    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            logits: logits distribution shape (vocabulary size)
+            top_k >0: keep only top k tokens with highest probability (top-k filtering).
+            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        
+        Basic outline taken from https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
-    Filter a distribution of logits using top-k and/or nucleus (top-p) filtering.
-
-    Args:
-        logits (torch.Tensor): Logits distribution with shape (batch size, vocabulary size).
-        top_k (int, optional): Keep only top k tokens with highest probability (top-k filtering).
-                               Set to 0 to disable. Defaults to 0.
-        top_p (float, optional): Keep the top tokens with a cumulative probability >= top_p (nucleus filtering).
-                                 Must be between 0 and 1, inclusive. Defaults to 1.0.
-        filter_value (float, optional): The value to assign to filtered logits. Defaults to -float('Inf').
-        min_tokens_to_keep (int, optional): Ensure that at least this number of tokens are kept per batch example.
-                                            Defaults to 1.
-
-    Returns:
-        torch.Tensor: The filtered logits.
-    """
-    """
-        Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        Make sure we keep at least min_tokens_to_keep per batch example in the output
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
+    assert logits.dim() == 2  # [BATCH_SIZE, VOCAB_SIZE]
+    top_k = min(top_k, logits.size(-1))  # Safety check
     if top_k > 0:
-        # Apply top-k filtering
-        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))
-        indices_to_remove = logits < torch.topk(logits, top_k).values[..., -1, None]
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k, dim=1)[0][..., -1, None]
         logits[indices_to_remove] = filter_value
-
-    if top_p < 1.0:
-        # Apply top-p filtering
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Create a mask to remove tokens with cumulative probability above the top_p threshold
-        sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # Scatter sorted tensors back to original indexing
-        indices_to_remove = sorted_indices.scatter(
-            1, sorted_indices, sorted_indices_to_remove
-        )
-        logits[indices_to_remove] = filter_value
-
+    
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+    
+    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+    # Remove tokens with cumulative probability above the threshold
+    sorted_indices_to_remove = cumulative_probs > top_p
+    # Shift the indices to the right to keep also the first token above the threshold
+    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+    sorted_indices_to_remove[..., 0] = 0
+    
+    # Replace logits to be removed with -inf in the sorted_logits
+    sorted_logits[sorted_indices_to_remove] = filter_value
+    # Then reverse the sorting process by mapping back sorted_logits to their original position
+    logits = torch.gather(sorted_logits, 1, sorted_indices.argsort(-1))
+    
     return logits
 
 
