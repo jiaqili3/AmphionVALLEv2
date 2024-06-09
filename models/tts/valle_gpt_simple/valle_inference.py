@@ -39,7 +39,7 @@ class ValleInference(torch.nn.Module):
             eos_prompt_id=1330,
             num_hidden_layers=16,
         )
-        assert nar_path is not None:
+        assert nar_path is not None
         self.nar_model.load_state_dict(torch.load(nar_path, map_location='cpu'))
         self.nar_model.eval().to(self.device)
 
@@ -92,6 +92,7 @@ class ValleInference(torch.nn.Module):
             speech: [B, T]
             phone_ids: [B, T]
         )
+        returns: [B, 1, T] audio
         '''
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
@@ -131,4 +132,4 @@ class ValleInference(torch.nn.Module):
                     nar_vq_ids = torch.cat([vq_id[..., :150], nar_vq_ids], dim=-1)
 
                 recovered_audio = self.decode(nar_vq_ids)
-                return recovered_audio
+                return recovered_audio # [B, 1, T]

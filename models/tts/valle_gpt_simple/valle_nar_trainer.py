@@ -137,7 +137,7 @@ class ValleNARTrainer(ValleARTrainer):
             if self.cfg.use_speechtokenizer:
                 # Extract discrete codes from SpeechTokenizer
                 # 16k
-                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,T] -> (n_q, B, T)
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
                 # Concatenating semantic tokens (RVQ_1) and supplementary timbre tokens and then decoding
                 # wav = self.codec_encoder.decode(vq_id)
                 # torchaudio.save('a.wav', wav[0].cpu(), 16000)

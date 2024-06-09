@@ -221,7 +221,7 @@ class ValleARTrainer(BaseTrainer):
                 ),
                 pin_memory=self.cfg.train.dataloader.pin_memory,
                 persistent_workers=self.cfg.train.dataloader.persistent_workers,
-                # prefetch_factor=4,
+                prefetch_factor=4,
             )
             print(f'process {self.accelerator.local_process_index} has {len(batches)} batches')
             self.accelerator.wait_for_everyone()
