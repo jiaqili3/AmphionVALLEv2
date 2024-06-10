@@ -45,7 +45,7 @@ if [ -z "$exp_config" ]; then
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="ar_mls"
+exp_name="ar_mls_speechtokenizer"
 
 port=53333
 
@@ -58,7 +58,25 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --exp_name $exp_name \
     --log_level debug \
     --seed $RANDOM \
-    --resume \
-    --resume_type "resume"
+    # --resume \
+    # --resume_type "resume"
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
+
+sleep 60
+
+echo "Resuming......"
+
+while [ ! -f "/mnt/petrelfs/hehaorui/jiaqi/stop_training" ]; do
+    port=$((port + 1))
+    CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port $port \
+    "${work_dir}"/bins/tts/train.py \
+        --config $exp_config \
+        --exp_name $exp_name \
+        --log_level debug \
+        --seed $RANDOM \
+        --resume \
+        --resume_type "resume"
+    
+    sleep 60
+done

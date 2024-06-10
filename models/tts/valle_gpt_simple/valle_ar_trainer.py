@@ -127,7 +127,7 @@ class ValleARTrainer(BaseTrainer):
         with torch.no_grad():
             if self.cfg.use_speechtokenizer:
                 # Extract discrete codes from SpeechTokenizer
-                vq_id = self.codec_encoder.encode(batch['speech']) # [B,T] -> (n_q, B, T)
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
             else:
                 vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
                 vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)

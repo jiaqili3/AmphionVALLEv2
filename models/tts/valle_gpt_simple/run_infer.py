@@ -176,7 +176,7 @@ def test():
     inference = ValleInference(use_vocos=False, 
                                use_speechtokenizer=True,
                                ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls/checkpoint/epoch-0005_step-0406000_loss-2.203645/pytorch_model.bin',
-                               nar_path='/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple/nar_mls_speechtokenizer/checkpoint/epoch-0000_step-0042000_loss-2.070740/pytorch_model.bin')
+                               nar_path='/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple/nar_mls_speechtokenizer/checkpoint/epoch-0001_step-0164000_loss-1.848536/pytorch_model.bin')
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
     if test_wer:
         wer = WER()
@@ -221,6 +221,9 @@ def test():
                                 
                                 torchaudio.save(f"infer/{batch['output_path'][0]}", output_wav[0].cpu(), SAMPLE_RATE)
                                 print(f'saved to ' + f"infer/{batch['output_path'][0]}")
+
+                                # breakpoint()
+                                # torchaudio.save('gt.wav', batch['speech'][0].unsqueeze(0).cpu(), SAMPLE_RATE)
 
                                 # resample to 16k
                                 output_wav_resampled = torchaudio.functional.resample(output_wav, orig_freq=SAMPLE_RATE, new_freq=16000)
