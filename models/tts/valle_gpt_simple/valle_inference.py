@@ -10,15 +10,16 @@ class ValleInference(torch.nn.Module):
         # prepare pretrained VALLE AR model
         from .valle_ar import ValleAR
         self.ar_model = ValleAR(
-            phone_vocab_size=100,
+            phone_vocab_size=300,
             target_vocab_size=1024,
-            pad_token_id=1124,
-            bos_target_id=1125,
-            eos_target_id=1126,
-            bos_phone_id=1127,
-            eos_phone_id=1128,
-            bos_prompt_id=1129,
-            eos_prompt_id=1130,
+            pad_token_id=1324,
+            bos_target_id=1325,
+            eos_target_id=1326,
+            bos_phone_id=1327,
+            eos_phone_id=1328,
+            bos_prompt_id=1329,
+            eos_prompt_id=1330,
+            num_hidden_layers=16,
         )
         # change the following path to your trained model path
         assert ar_path is not None
@@ -107,16 +108,16 @@ class ValleInference(torch.nn.Module):
             # typically we only require one config in the chunk, 
             # but we can also use multiple configs to, for example, use different sampling temperature at different positions
             for chunk in chunk_configs:
-                # ar_vq_ids = self.ar_model.sample_hf(
-                #     batch['phone_ids'],
-                #     vq_id[0, :, :150],
-                #     top_p=chunk['top_p'],
-                #     top_k=chunk['top_k'],
-                #     temperature=chunk['temperature'],
-                #     num_beams=chunk['num_beams'],
-                #     repeat_penalty=chunk['repeat_penalty'],
-                #     max_length=chunk['max_length'],
-                # )
+                ar_vq_ids = self.ar_model.sample_hf(
+                    batch['phone_ids'],
+                    vq_id[0, :, :150],
+                    top_p=chunk['top_p'],
+                    top_k=chunk['top_k'],
+                    temperature=chunk['temperature'],
+                    num_beams=chunk['num_beams'],
+                    repeat_penalty=chunk['repeat_penalty'],
+                    max_length=chunk['max_length'],
+                )
                 # recovered_audio_ar = self.decode(ar_vq_ids.unsqueeze(0))
                 # torchaudio.save('recovered_audio_ar.wav', recovered_audio_ar[0].cpu(), 24000)
 
@@ -124,8 +125,8 @@ class ValleInference(torch.nn.Module):
                 nar_vq_ids = self.nar_model.sample_hf(
                     phone_ids=batch['phone_ids'],
                     prompt_ids=vq_id[:,:,:150],
-                    # first_stage_ids=ar_vq_ids,
-                    first_stage_ids=vq_id[0, :, 150:],
+                    first_stage_ids=ar_vq_ids,
+                    # first_stage_ids=vq_id[0, :, 150:],
                 )
                 
                 if return_prompt:
