@@ -39,7 +39,7 @@
           "gamma": 0.999999
         },
         "batch_size": 5,
-        "max_tokens": 11000,
+        "max_tokens": 9000,
         "max_sentences": 64,
         "random_seed": 0
     }, 
