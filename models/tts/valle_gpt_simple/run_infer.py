@@ -175,7 +175,7 @@ def test():
     from .valle_inference import ValleInference
     inference = ValleInference(use_vocos=False, 
                                use_speechtokenizer=True,
-                               ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls/checkpoint/epoch-0005_step-0406000_loss-2.203645/pytorch_model.bin',
+                               ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls_speechtokenizer/checkpoint/epoch-0004_step-0190000_loss-0.813551/pytorch_model.bin',
                                nar_path='/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple/nar_mls_speechtokenizer/checkpoint/epoch-0001_step-0164000_loss-1.848536/pytorch_model.bin')
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
     if test_wer:
@@ -195,15 +195,16 @@ def test():
     os.mkdir('infer')
     os.mkdir('wer_abnormals_output')
     for num_beams in [1]:
-            for top_k in [15]:
-                for top_p in [1.0]:
-                    for repeat_penalty in [1.2]:
-                        for temperature in [1.15]:
+            for top_k in [30]:
+                for top_p in [0.9]:
+                    for repeat_penalty in [1.0]:
+                        for temperature in [0.95]:
     
                             for batch in tqdm.tqdm(dataloader):
                                 if batch['speech'].shape[-1] < 10*SAMPLE_RATE or batch['speech'].shape[-1] > 20*SAMPLE_RATE:
                                     continue
-                                # print(batch['target_transcript'][0].lower())
+                                # breakpoint()
+                                print(batch['target_transcript'][0].lower())
                                 chunks = [dict(top_p=top_p,
                                     top_k=top_k,
                                     temperature=temperature,
