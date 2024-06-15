@@ -384,7 +384,7 @@ class BaseTrainer(object):
             with self.accelerator.accumulate(self.model):
                 loss = self._train_step(batch)
                 self.current_loss = loss.item()
-                ema_loss = 0.95 * ema_loss + 0.05 * self.current_loss if ema_loss is not None else self.current_loss
+                ema_loss = 0.99 * ema_loss + 0.01 * self.current_loss if ema_loss is not None else self.current_loss
                 self.accelerator.backward(loss)
                 if self.accelerator.sync_gradients:
                     self.accelerator.clip_grad_norm_(
@@ -475,13 +475,17 @@ class BaseTrainer(object):
         method after** ``accelerator.prepare()``.
         """
         if checkpoint_path is None:
-            all_ckpts = os.listdir(checkpoint_dir)
-            all_ckpts = filter(lambda x: x.startswith("epoch"), all_ckpts)
-            ls = list(all_ckpts)
-            ls = [os.path.join(checkpoint_dir, i) for i in ls]
-            ls.sort(key=lambda x: int(x.split("_")[-2].split("-")[-1]), reverse=True)
-            checkpoint_path = ls[0]
-            self.logger.info("Resume from {}".format(checkpoint_path))
+            try:
+                all_ckpts = os.listdir(checkpoint_dir)
+                all_ckpts = filter(lambda x: x.startswith("epoch"), all_ckpts)
+                ls = list(all_ckpts)
+                ls = [os.path.join(checkpoint_dir, i) for i in ls]
+                ls.sort(key=lambda x: int(x.split("_")[-2].split("-")[-1]), reverse=True)
+                checkpoint_path = ls[0]
+                self.logger.info("Resume from {}".format(checkpoint_path))
+            except Exception as e:
+                print("Failed to load checkpoint from {}, starting FROM SCRATCH...".format(checkpoint_dir))
+                return None
 
         if resume_type in ["resume", ""]:
             # Load all the things, including model weights, optimizer, scheduler, and random states.

@@ -41,11 +41,11 @@ python setup.py build_ext --inplace
 cd $work_dir
 
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_nar_mls.json
+    exp_config="${exp_dir}"/exp_nar_mls_speechtokenizer.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="nar_mls"
+exp_name="nar_mls_speechtokenizer"
 
 port=17004
 
@@ -59,7 +59,27 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --log_level debug \
     --seed $RANDOM \
     --resume \
-    --resume_type "resume"
+    --resume_type "resume" \
+    $1
 
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
+# to run inference, you would need the "pytorch_model.bin" file
+
+sleep 60
+
+echo "Resuming......"
+
+while [ ! -f "/mnt/petrelfs/hehaorui/jiaqi/stop_training" ]; do
+    port=$((port + 1))
+    CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port $port \
+    "${work_dir}"/bins/tts/train.py \
+        --config $exp_config \
+        --exp_name $exp_name \
+        --log_level debug \
+        --seed $RANDOM \
+        --resume \
+        --resume_type "resume"
+    
+    sleep 60
+done

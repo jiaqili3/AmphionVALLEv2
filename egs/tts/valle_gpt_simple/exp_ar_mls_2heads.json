@@ -1,7 +1,6 @@
 {
     "model_type": "valle_simple_ar",
     "log_dir": "/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple",
-    "use_speechtokenizer": true,
     "train": {
         "gradient_accumulation_step": 1,
         "find_unused_parameters": false,
@@ -28,10 +27,10 @@
           "weight_decay": 0.01
         },
         "adamw": {
-          "lr": 3e-4
+          "lr": 2e-4
         },
         "scheduler": {
-          "warmup_steps": 25000,
+          "warmup_steps": 20000,
           "total_steps": 800000,
           "min_lr": 1e-5
         },
@@ -39,7 +38,7 @@
           "gamma": 0.999999
         },
         "batch_size": 5,
-        "max_tokens": 9000,
+        "max_tokens": 8500,
         "max_sentences": 64,
         "random_seed": 0
     }, 
@@ -52,15 +51,16 @@
       "content_model_path": "/mnt/petrelfs/hehaorui/data/pretrained_ckpts/mhubert"
     },
     "model": {
-      "phone_vocab_size": 300,
+      "phone_vocab_size": 100,
       "target_vocab_size": 1024,
-      "pad_token_id": 1324,
-      "bos_target_id": 1325,
-      "eos_target_id": 1326,
-      "bos_phone_id": 1327,
-      "eos_phone_id": 1328,
-      "bos_prompt_id": 1329,
-      "eos_prompt_id": 1330,
+      "eos_target_id": 1025,
+      "pad_token_id": 1124,
+      "bos_target_id": 1125,
+      "bos_phone_id": 1127,
+      "eos_phone_id": 1128,
+      "bos_prompt_id": 1129,
+      "eos_prompt_id": 1130,
+      "num_prediction_heads": 2,
       "num_hidden_layers": 16
     }
     }

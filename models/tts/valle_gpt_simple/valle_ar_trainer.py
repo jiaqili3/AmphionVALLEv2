@@ -51,15 +51,36 @@ def make_pad_mask(lengths: torch.Tensor, max_len: int = 0, left_pad=False) -> to
 class ValleARTrainer(BaseTrainer):
     def __init__(self, args=None, cfg=None):
         super().__init__(args, cfg)
-        from encodec import EncodecModel
-        with self.accelerator.main_process_first():
-            self.codec_encoder = EncodecModel.encodec_model_24khz()
-            self.codec_encoder.set_target_bandwidth(6.0)
+        if self.cfg.use_speechtokenizer:
+            from speechtokenizer import SpeechTokenizer
+            config_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/config.json'
+            ckpt_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
+            self.codec_encoder = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
+            self.codec_encoder.eval()
             self.codec_encoder.to(self.accelerator.device)
-            self.codec_decoder = None    
+            print(f'Loaded SpeechTokenizer from {config_path} and {ckpt_path}')
+        else:
+            from encodec import EncodecModel
+            with self.accelerator.main_process_first():
+                self.codec_encoder = EncodecModel.encodec_model_24khz()
+                self.codec_encoder.set_target_bandwidth(6.0)
+                self.codec_encoder.to(self.accelerator.device)
+                self.codec_decoder = None   
+                print('Loaded EncodecModel') 
         self.top1_accuracies = []
         self.top5_accuracies = []
         self.top10_accuracies = []
+        
+        if hasattr(self.cfg, 'flatten_first_2_layers'):
+            self.flatten_first_2_layers = self.cfg.flatten_first_2_layers
+            print('flattened:',self.flatten_first_2_layers)
+        else:
+            self.flatten_first_2_layers = False
+            
+        if hasattr(self.cfg, 'num_prediction_heads'):
+            self.num_prediction_heads = self.cfg.num_prediction_heads
+            print('num_prediction_heads:',self.num_prediction_heads)
+            
     def _accelerator_prepare(self):
         # if self.accelerator.is_main_process:
         #     breakpoint()
@@ -85,7 +106,10 @@ class ValleARTrainer(BaseTrainer):
 
 
     def _build_model(self):
-        from .valle_ar import ValleAR
+        if hasattr(self.cfg.model, 'num_prediction_heads'):
+            from .valle_ar_multihead import ValleAR
+        else:
+            from .valle_ar import ValleAR
         return ValleAR(**self.cfg.model)
 
     def _train_step(self, batch):
@@ -101,19 +125,32 @@ class ValleARTrainer(BaseTrainer):
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
         with torch.no_grad():
-            vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-            vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+            if self.cfg.use_speechtokenizer:
+                # Extract discrete codes from SpeechTokenizer
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
+            else:
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
             
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//320]
-            batch['speech'] = vq_id[0] # use first layer
-        batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
-        assert batch['speech_len'].max() <= batch['speech'].shape[1]
+            if self.flatten_first_2_layers:
+                first_layer = vq_id[0]
+                second_layer = vq_id[1]
+                # flatten the first two layers
+                batch['speech'] = torch.stack([first_layer, second_layer], dim=-1).flatten(-2,-1)
+                batch['speech_len'] = batch['speech_len'] // 160
+            elif hasattr(self.cfg.model, 'num_prediction_heads'):
+                batch['speech'] = vq_id[:2] # first two layers
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+            else:
+                batch['speech'] = vq_id[0] # use first layer
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+        assert batch['speech_len'].max() <= batch['speech'].shape[-1]
 
-        assert batch['phone_ids'][0, -1] != 0
 
-        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=True).to(torch.long)
+        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=False).to(torch.long)
         speech_mask = 1 - make_pad_mask(batch['speech_len'], max_len=batch['speech'].size(1)).to(torch.long)
 
         out = self.model(
@@ -141,7 +178,7 @@ class ValleARTrainer(BaseTrainer):
             train_dataset = VALLEDataset()
         elif self.cfg.train.dataset.name == 'mls':
             from .mls_dataset import VALLEDataset as VALLEDataset
-            train_dataset = VALLEDataset(self.cfg.trans_exp, resample_to_24k=True)
+            train_dataset = VALLEDataset(self.cfg.trans_exp, resample_to_24k=False)
         elif self.cfg.train.dataset.name == 'libritts':
             from .libritts_dataset import VALLEDataset as VALLEDataset
             train_dataset = VALLEDataset(self.cfg.trans_exp)
@@ -221,8 +258,12 @@ class ValleARTrainer(BaseTrainer):
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
         with torch.no_grad():
-            vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-            vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+            if self.cfg.use_speechtokenizer:
+                # Extract discrete codes from SpeechTokenizer
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
+            else:
+                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//200]
@@ -231,22 +272,31 @@ class ValleARTrainer(BaseTrainer):
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # recovered_audio.shape: torch.Size([1, 1, 50200])
 
-            batch['speech'] = vq_id[0] # use first layer
-
-
+            if self.flatten_first_2_layers:
+                first_layer = vq_id[0]
+                second_layer = vq_id[1]
+                # flatten the first two layers
+                batch['speech'] = torch.stack([first_layer, second_layer], dim=-1).flatten(-2,-1)
+                batch['speech_len'] = batch['speech_len'] // 160
+            elif hasattr(self.cfg.model, 'num_prediction_heads'):
+                batch['speech'] = vq_id[:2] # first two layers
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+            else:
+                batch['speech'] = vq_id[0] # use first layer
+                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+        
             # save gt
-            recovered_audio = self.codec_encoder.decode([(vq_id[:1].transpose(0,1), None)])
-            torchaudio.save('gt.wav', recovered_audio[0].cpu(), 24000)
-
-            out_vq_ids = self.model.sample_hf(
-                batch['phone_ids'][:1, ...],
-                batch['speech'][:1, :225],
-            )
-            out_vq_ids = torch.cat([batch['speech'][:1, :225], out_vq_ids[:1, ...]], dim=1)
+            breakpoint()
+            recovered_audio = self.codec_encoder.decode(vq_id[:1,:1])
+            # recovered_audio = self.codec_encoder.decode([(vq_id[:1].transpose(0,1), None)])
+            torchaudio.save('gt.wav', recovered_audio[0].cpu(), 16000)
+            out_vq_ids = self.model.sample_hf(batch['phone_ids'][:1, ...],batch['speech'][:1, :225],temperature=0.9)
+            # out_vq_ids = torch.cat([batch['speech'][:1, :225], out_vq_ids[:1, ...]], dim=1)
 
             # reconstruct form tokens
-            recovered_audio = self.codec_encoder.decode([(out_vq_ids.unsqueeze(0), None)])
-            torchaudio.save('a.wav', recovered_audio[0].cpu(), 24000)
+            recovered_audio = self.codec_encoder.decode(out_vq_ids.unsqueeze(0))
+            # recovered_audio = self.codec_encoder.decode([(out_vq_ids, None)])
+            torchaudio.save('a.wav', recovered_audio[0].cpu(), 16000)
             breakpoint()
             print()
 

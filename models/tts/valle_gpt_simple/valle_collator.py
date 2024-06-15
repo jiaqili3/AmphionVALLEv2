@@ -29,10 +29,15 @@ class VALLECollator():
         packed_batch_features['speech_len'] = torch.tensor([len(s) for s in speeches], dtype=torch.long)
         packed_batch_features['speech'] = pad_sequence(speeches, batch_first=True, padding_value=0)
 
-        # Process 'phone' data, with left padding
-        phones = [process_tensor(b['phone'], dtype=torch.long).flip(0) for b in batch] # first reverse the whole sequence
+        # right-padding 'phone' data
+        phones = [process_tensor(b['phone'], dtype=torch.long) for b in batch]
         packed_batch_features['phone_lens'] = torch.tensor([len(phone) for phone in phones], dtype=torch.long)
-        packed_batch_features['phone_ids'] = pad_sequence(phones, batch_first=True, padding_value=0) # do the right padding
-        packed_batch_features['phone_ids'] = packed_batch_features['phone_ids'].flip(1) # flip back to original order (left padding)
+        packed_batch_features['phone_ids'] = pad_sequence(phones, batch_first=True, padding_value=0)
+
+        # # Process 'phone' data, with left padding
+        # phones = [process_tensor(b['phone'], dtype=torch.long).flip(0) for b in batch] # first reverse the whole sequence
+        # packed_batch_features['phone_lens'] = torch.tensor([len(phone) for phone in phones], dtype=torch.long)
+        # packed_batch_features['phone_ids'] = pad_sequence(phones, batch_first=True, padding_value=0) # do the right padding
+        # packed_batch_features['phone_ids'] = packed_batch_features['phone_ids'].flip(1) # flip back to original order (left padding)
         
         return packed_batch_features

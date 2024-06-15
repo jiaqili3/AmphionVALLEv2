@@ -5,10 +5,8 @@
 
 import random
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from utils.data_utils import *
 from tqdm import tqdm
-from g2p_en import G2p
 import librosa
 from petrel_client.client import Client
 from torch.utils.data import Dataset
@@ -24,7 +22,12 @@ def get_duration(file_path):
     duration = librosa.get_duration(path=file_path, sr=SAMPLE_RATE)
     return file_path, duration
 # g2p
-from utils.g2p.g2p import phonemizer_g2p
+# from utils.g2p.g2p import phonemizer_g2p
+
+# override g2p with g2p_en library
+from .g2p_processor import G2pProcessor
+phonemizer_g2p = G2pProcessor()
+
 # lang2token ={
 #     'zh': "[ZH]", 
 #     'ja':"[JA]", 
@@ -62,8 +65,10 @@ class VALLEDataset(Dataset):
         self.client = Client('/mnt/petrelfs/hehaorui/petreloss.conf')
         self.resample_to_24k = resample_to_24k
         if self.resample_to_24k:
+            assert SAMPLE_RATE == 24000
             print(f'Using 24k resampling.')
 
+        print(f'data sampling rate is {SAMPLE_RATE}')
 
         self.dataset2dir = {
             'mls_train': 'public-dataset-p2:s3://public-dataset-p2/Multilingual-LibriSpeech/data_0321/unzip/mls_english1/train/audio',
@@ -265,11 +270,12 @@ class VALLEDataset(Dataset):
                     audio_files.append(rel_path)
         return audio_files
     
+    # only includes audio tokens
     def get_num_frames(self, index):
         # get_num_frames(durations) by index
         duration = self.meta_data_cache['duration'][index]
         # num_frames = duration * SAMPLE_RATE
-        num_frames = int(duration * 75)
+        num_frames = int(duration * 50)
 
         # file_rel_path = self.meta_data_cache['relpath'][index]
         # uid = file_rel_path.rstrip('.flac').split('/')[-1]
@@ -374,13 +380,11 @@ class VALLEDataset(Dataset):
         assert file_bytes is not None, f"file {full_file_path} not found"
         buffer = io.BytesIO(file_bytes)
         speech, _ = librosa.load(buffer, sr=SAMPLE_RATE)
-        if self.resample_to_24k:
-            speech = librosa.resample(speech, orig_sr=SAMPLE_RATE, target_sr=24000)
         speech = torch.tensor(speech, dtype=torch.float32)
-        # pad speech to multiples of 200
-        remainder = speech.size(0) % 200
+        # pad speech to multiples of 320
+        remainder = speech.size(0) % 320
         if remainder > 0:
-            pad = 200 - remainder
+            pad = 320 - remainder
             speech = torch.cat([speech, torch.zeros(pad, dtype=torch.float32)], dim=0)
 
         # inputs = self._get_reference_vc(speech, hop_length=200)
