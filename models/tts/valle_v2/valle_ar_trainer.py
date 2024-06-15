@@ -12,7 +12,7 @@ from pathlib import Path
 import torch
 from tqdm import tqdm
 import torch.nn as nn
-from models.base.new_trainer import BaseTrainer
+from .base_trainer import BaseTrainer
 
 def make_pad_mask(lengths: torch.Tensor, max_len: int = 0, left_pad=False) -> torch.Tensor:
     """
