@@ -12,6 +12,10 @@ This can be a great tool if you want to learn speech language models and its imp
 Set up your environemnt as in Amphion README (you'll need a conda environment, and we recommend using Linux). A GPU is recommended if you want to train this model yourself.
 For inferencing our pretrained models, you could generate samples even without a GPU.
 
+```bash
+pip install transformers==4.41.2
+```
+
 <!-- espeak-ng is required to run G2p. To install it, you could refer to: 
 https://github.com/espeak-ng/espeak-ng/blob/master/docs/guide.md
 
@@ -20,13 +24,30 @@ For Windows, refer to the above link.
 If you do not have sudo privilege, you could build the library by following the last section of this readme. -->
 
 ## Inferencing pretrained VALLE models
-### Inferencing in IPython notebook
+### Download pretrained weights
+You need to download our pretrained weights from huggingface. 
+
+Script to download AR and NAR model checkpoint: 
+```bash
+huggingface-cli download jiaqili3/vallex valle_ar_mls_196000.bin valle_nar_mls_164000.bin --local-dir ckpts
+```
+Script to download codec model (SpeechTokenizer) checkpoint:
+```bash
+huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts
+```
+
+### Inference in IPython notebook
 
 We provide our pretrained VALLE model that is trained on 45k hours MLS dataset.
 The "demo.ipynb" file provides a working example of inferencing our pretrained VALL-E model. Give it a try!
 
-## The model files
-File `valle_ar.py` and `valle_nar.py` in "models/tts/valle_v2" folder are models files, these files can be run directly via `python -m models.tts.valle_v2.valle_ar` (or `python -m models.tts.valle_v2.valle_nar`, and will invoke a test which overfits it to a single example.
+## Examining the model files
+Examining the model files of VALLE is a great way to learn how it works.
+We provide examples that allows you to overfit a single batch (so no dataset downloading is required). 
+
+The AR model is essentially a causal language model that "continues" a speech. The NAR model is a modification from the AR model which 
+File `valle_ar.py` and `valle_nar.py` in "models/tts/valle_v2" folder are models files, these files can be run directly via `python -m models.tts.valle_v2.valle_ar` (or `python -m models.tts.valle_v2.valle_nar`).
+This will invoke a test which overfits it to a single example.
 
 ## Preparing dataset and dataloader
 Write your own dataloader for your dataset. 

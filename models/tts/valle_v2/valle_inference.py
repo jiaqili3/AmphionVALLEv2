@@ -2,7 +2,8 @@ import torch
 import torchaudio
 
 class ValleInference(torch.nn.Module):
-    def __init__(self, use_vocos=False, use_speechtokenizer=True, ar_path=None, nar_path=None, device='cuda'):
+    def __init__(self, use_vocos=False, use_speechtokenizer=True, ar_path=None, nar_path=None, 
+                 speechtokenizer_path=None, device='cuda'):
         super().__init__()
 
         self.device = device
@@ -48,11 +49,10 @@ class ValleInference(torch.nn.Module):
         assert not (use_speechtokenizer and use_vocos), 'Only one of use_speechtokenizer and use_vocos can be True'
         self.use_speechtokenizer = use_speechtokenizer
         if use_speechtokenizer:
-            from speechtokenizer import SpeechTokenizer
-            # follow https://github.com/ZhangXInFD/SpeechTokenizer?tab=readme-ov-file
+            from models.codec.speechtokenizer.model import SpeechTokenizer
             # download from https://huggingface.co/fnlp/SpeechTokenizer/tree/main/speechtokenizer_hubert_avg
-            config_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/config.json'
-            ckpt_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
+            config_path = speechtokenizer_path + '/config.json'
+            ckpt_path = speechtokenizer_path + '/SpeechTokenizer.pt'
             self.codec_encoder = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
             self.codec_encoder.eval()
             self.codec_encoder.to(device)
@@ -88,13 +88,15 @@ class ValleInference(torch.nn.Module):
                 bandwidth_id = torch.tensor([2], device=vq_ids.device)
                 return self.codec_decoder.decode(features, bandwidth_id=bandwidth_id).unsqueeze(0)
 
-    def forward(self, batch, chunk_configs:list, return_prompt=False):
+    def forward(self, batch, chunk_configs:list, return_prompt=False, prompt_len=None):
         '''batch: dict(
             speech: [B, T]
             phone_ids: [B, T]
         )
         returns: [B, 1, T] audio
         '''
+        if prompt_len is None:
+            prompt_len = 100000 # no prompt length limiting
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(self.device)
@@ -110,7 +112,7 @@ class ValleInference(torch.nn.Module):
             for chunk in chunk_configs:
                 ar_vq_ids = self.ar_model.sample_hf(
                     batch['phone_ids'],
-                    vq_id[0, :, :150],
+                    vq_id[0, :, :prompt_len],
                     top_p=chunk['top_p'],
                     top_k=chunk['top_k'],
                     temperature=chunk['temperature'],
@@ -121,16 +123,15 @@ class ValleInference(torch.nn.Module):
                 # recovered_audio_ar = self.decode(ar_vq_ids.unsqueeze(0))
                 # torchaudio.save('recovered_audio_ar.wav', recovered_audio_ar[0].cpu(), 24000)
 
-                nar_gt_end_layer = 2
                 nar_vq_ids = self.nar_model.sample_hf(
                     phone_ids=batch['phone_ids'],
-                    prompt_ids=vq_id[:,:,:150],
+                    prompt_ids=vq_id[:,:,:prompt_len],
                     first_stage_ids=ar_vq_ids,
-                    # first_stage_ids=vq_id[0, :, 150:],
+                    # first_stage_ids=vq_id[0, :, prompt_len:],
                 )
                 
                 if return_prompt:
-                    nar_vq_ids = torch.cat([vq_id[..., :150], nar_vq_ids], dim=-1)
+                    nar_vq_ids = torch.cat([vq_id[..., :prompt_len], nar_vq_ids], dim=-1)
 
                 recovered_audio = self.decode(nar_vq_ids)
                 return recovered_audio # [B, 1, T]
