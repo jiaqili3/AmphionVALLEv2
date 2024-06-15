@@ -25,9 +25,9 @@ unset HTTPS_PROXY
  
 
 ######## Build Experiment Environment ###########
-exp_dir="/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/egs/tts/valle_gpt_simple"
+exp_dir="/mnt/workspace/lizhekai/AmphionVALLEv2/egs/tts/valle_v2"
 echo exp_dir
-work_dir="/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2"
+work_dir="/mnt/workspace/lizhekai/AmphionVALLEv2/"
 echo work_dir
 
 
@@ -40,44 +40,21 @@ mkdir -p monotonic_align
 python setup.py build_ext --inplace
 cd $work_dir
 
+######## Set Config File Dir ##############
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_ar_mls.json
+    exp_config="${exp_dir}"/exp_ar_libritts.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="ar_mls_speechtokenizer"
+######## Set the experiment name ##########
+exp_name="ar_libritts_dev_clean"
 
 port=53333
 
-
 ######## Train Model ###########
-echo "Exprimental Name: $exp_name"
-CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port $port \
-"${work_dir}"/bins/tts/train.py \
-    --config $exp_config \
-    --exp_name $exp_name \
-    --log_level debug \
-    --seed $RANDOM \
+echo "Experimental Name: $exp_name"
+CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --main_process_port $port "${work_dir}"/bins/tts/train.py --config $exp_config --exp_name $exp_name --log_level debug 
     --resume \
-    --resume_type "resume" \
-    $1
+    --resume_type "resume"
 
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
-
-sleep 60
-
-echo "Resuming......"
-
-while [ ! -f "/mnt/petrelfs/hehaorui/jiaqi/stop_training" ]; do
-    port=$((port + 1))
-    CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port $port \
-    "${work_dir}"/bins/tts/train.py \
-        --config $exp_config \
-        --exp_name $exp_name \
-        --log_level debug \
-        --seed $RANDOM \
-        --resume \
-        --resume_type "resume"
-    
-    sleep 60
-done

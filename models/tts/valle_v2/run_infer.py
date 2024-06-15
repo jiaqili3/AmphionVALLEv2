@@ -175,8 +175,8 @@ def test():
     from .valle_inference import ValleInference
     inference = ValleInference(use_vocos=False, 
                                use_speechtokenizer=True,
-                               ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_gpt_simple/ar_mls_speechtokenizer/checkpoint/epoch-0004_step-0190000_loss-0.813551/pytorch_model.bin',
-                               nar_path='/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_gpt_simple/nar_mls_speechtokenizer/checkpoint/epoch-0001_step-0164000_loss-1.848536/pytorch_model.bin')
+                               ar_path='/mnt/petrelfs/hehaorui/jiaqi/vc-dev/ckpt/valle_v2/ar_mls_speechtokenizer/checkpoint/epoch-0004_step-0190000_loss-0.813551/pytorch_model.bin',
+                               nar_path='/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/ckpt/valle_v2/nar_mls_speechtokenizer/checkpoint/epoch-0001_step-0164000_loss-1.848536/pytorch_model.bin')
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
     if test_wer:
         wer = WER()

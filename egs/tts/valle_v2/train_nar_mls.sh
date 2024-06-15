@@ -25,7 +25,7 @@ unset HTTPS_PROXY
  
 
 ######## Build Experiment Environment ###########
-exp_dir="/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/egs/tts/valle_gpt_simple"
+exp_dir="/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/egs/tts/valle_v2"
 echo exp_dir
 work_dir="/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2"
 echo work_dir
@@ -41,13 +41,13 @@ python setup.py build_ext --inplace
 cd $work_dir
 
 if [ -z "$exp_config" ]; then
-    exp_config="${exp_dir}"/exp_ar_mls_2heads.json
+    exp_config="${exp_dir}"/exp_nar_mls_speechtokenizer.json
 fi
 echo "Exprimental Configuration File: $exp_config"
 
-exp_name="ar_mls_2heads"
+exp_name="nar_mls_speechtokenizer"
 
-port=53333
+port=17004
 
 
 ######## Train Model ###########
@@ -62,7 +62,10 @@ CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES accelerate launch --main_process_port
     --resume_type "resume" \
     $1
 
+
 # uncomment the "resume" part to automatically resume from the last-time checkpoint
+# to run inference, you would need the "pytorch_model.bin" file
+
 sleep 60
 
 echo "Resuming......"

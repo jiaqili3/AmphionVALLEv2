@@ -1,37 +1,47 @@
-# VALLE v2
+# VALLE
+## Introduction
+This is an unofficial PyTorch implementation of VALL-E, a zero-shot voice cloning model via neural codec language modeling. 
+If trained properly, this model could match the performance specified in the original paper.
+## Change notes
+This is a refined version compared to the first version of VALLE in Amphion, we have changed the underlying implementation to Llama
+to provide better model performance, faster training speed, and more readable codes.
+This can be a great tool if you want to learn speech language models and its implementation.
 
 ## Installation requirement 
 
-Set up your environemnt as in Amphion README (e.g. by running `sh env.sh`).
+Set up your environemnt as in Amphion README (you'll need a conda environment, and we recommend using Linux). A GPU is recommended if you want to train this model yourself.
+For inferencing our pretrained models, you could generate samples even without a GPU.
 
-espeak-ng is required to run G2p. To install it, you could refer to: 
+<!-- espeak-ng is required to run G2p. To install it, you could refer to: 
 https://github.com/espeak-ng/espeak-ng/blob/master/docs/guide.md
 
 For Linux, it should be `sudo apt-get install espeak-ng`.
 For Windows, refer to the above link.
-If you do not have sudo privilege, you could build the library by following the last section of this readme.
+If you do not have sudo privilege, you could build the library by following the last section of this readme. -->
 
-## Inference pretrained VALLE models
+## Inferencing pretrained VALLE models
+### Inferencing in IPython notebook
+
 We provide our pretrained VALLE model that is trained on 45k hours MLS dataset.
-You could r
+The "demo.ipynb" file provides a working example of inferencing our pretrained VALL-E model. Give it a try!
 
 ## The model files
-File `valle_ar.py` and `valle_nar.py` in this folder are models files, these files can be run directly via `python -m models.tts.valle_gpt_simple.valle_ar` (or `python -m models.tts.valle_gpt_simple.valle_nar`, and will invoke a test which overfits it to a single example.
+File `valle_ar.py` and `valle_nar.py` in "models/tts/valle_v2" folder are models files, these files can be run directly via `python -m models.tts.valle_v2.valle_ar` (or `python -m models.tts.valle_v2.valle_nar`, and will invoke a test which overfits it to a single example.
 
 ## Preparing dataset and dataloader
 Write your own dataloader for your dataset. 
-You can reference the `__getitem__` method in `models/tts/valle_gpt_simple/mls_dataset.py`
+You can reference the `__getitem__` method in `models/tts/valle_v2/mls_dataset.py`
 It should return a dict of a 1-dimensional tensor 'speech', which is a 24kHz speech; and a 1-dimensional tensor of 'phone', which is the phoneme sequence of the speech.
 
 As long as your dataset returns this in `__getitem__`, it should work.
 
 ## Training AR with MLS dataset (Large Dataset)
 ```bash
-sh ./egs/tts/valle_gpt_simple/train_ar_mls.sh
+sh ./egs/tts/valle_v2/train_ar_mls.sh
 ```
 ## Training NAR with MLS dataset (Large Dataset)
 ```bash
-sh ./egs/tts/valle_gpt_simple/train_nar_mls.sh
+sh ./egs/tts/valle_v2/train_nar_mls.sh
 ```
 # Practice with your own dataset (`dev-clean` in [LibriTTS](https://www.openslr.org/60) for example) 
 
@@ -42,7 +52,7 @@ In this part we will use the 'dev-clean' part of the LibriTTS dataset as trainin
 You need to fill in the square brackets such as `[YourDatadir]`
 ## [Download `dev-clean` Dataset](https://www.openslr.org/60)
 
-You can practice with smaller datasets using `egs/tts/valle_gpt_simple/train_ar_libritts.sh` 
+You can practice with smaller datasets using `egs/tts/valle_v2/train_ar_libritts.sh` 
 
 Here we gonna use smaller dataset in **LibriTTS** `dev-clean.tar.gz` 1.2 GB as example.
 
@@ -55,7 +65,7 @@ weget https://openslr.magicdatatech.com/resources/60/dev-clean.tar.gz
 
 If your download speed is slow ,we recommand you use your own VPN download from US mirror `https://us.openslr.org/resources/60/dev-clean.tar.gz` and upload it to your server.
 
-## [Prepare Dataloader](../../../models/tts/valle_gpt_simple/libritts_dataset.py) (Create Your Dataset File)
+## [Prepare Dataloader](../../../models/tts/valle_v2/libritts_dataset.py) (Create Your Dataset File)
 
 Make file `libritts_dataset.py`
 
@@ -131,14 +141,14 @@ Function getitem returns phone and speech sequence
         speech, _ = librosa.load(full_file_path, sr=SAMPLE_RATE)
 ```
 
-**You can test dataset.py by run `python -m models.tts.valle_gpt_simple.libritts_dataset`**
+**You can test dataset.py by run `python -m models.tts.valle_v2.libritts_dataset`**
 
 [TODO] If you want to test, don't forget change your workspace dir:
 
 ```py
 def test():
     from utils.util import load_config
-    cfg = load_config('/[YourWorkspace]/AmphionVALLEv2/egs/tts/valle_gpt_simple/exp_ar_libritts.json')
+    cfg = load_config('/[YourWorkspace]/AmphionVALLEv2/egs/tts/valle_v2/exp_ar_libritts.json')
     dataset = VALLEDataset(cfg.trans_exp)
     metadata_cache = dataset.metadata_cache
     trans_cache = dataset.trans_cache
@@ -147,13 +157,13 @@ def test():
     breakpoint()
 ```
 
-run `python -m models.tts.valle_gpt_simple.libritts_dataset`
+run `python -m models.tts.valle_v2.libritts_dataset`
 
 if you get a dataframe of transcripts with dir_path and Duration your dataset.py is correct 😊
 
-## [Add your Dataloader to the Trainer](../../../models/tts/valle_gpt_simple/valle_ar_trainer.py)
+## [Add your Dataloader to the Trainer](../../../models/tts/valle_v2/valle_ar_trainer.py)
 
-Here we add our dataset class `libritts` add to the Trainer: `AmphionVALLEv2/models/tts/valle_gpt_simple/valle_ar_trainer.py`
+Here we add our dataset class `libritts` add to the Trainer: `AmphionVALLEv2/models/tts/valle_v2/valle_ar_trainer.py`
 
 ```py
     ##########add your own dataloader to the trainer#############
@@ -172,12 +182,12 @@ Here we add our dataset class `libritts` add to the Trainer: `AmphionVALLEv2/mod
 
 ## [Edit Training Config](exp_ar_libritts.json)
 
-You can change the experiment settings in the `/AmphionVALLEv2/egs/tts/valle_gpt_simple/exp_ar_libritts.json` such as the learning rate, optimizer and the dataset.
+You can change the experiment settings in the `/AmphionVALLEv2/egs/tts/valle_v2/exp_ar_libritts.json` such as the learning rate, optimizer and the dataset.
 
 **[TODO]: Set your log directory**
 
 ```json
-"log_dir": "/[YourWorkspace]/AmphionVALLEv2/ckpt/valle_gpt_simple",
+"log_dir": "/[YourWorkspace]/AmphionVALLEv2/ckpt/valle_v2",
 ```
 
 Here we choose `libritts` dataset we added and set `use_dynamic_dataset` false.
@@ -217,13 +227,13 @@ I used batch_size=3 to successfully run on a single card, if you'r out of memory
 
 ## [Prepare Training Script File](train_ar_libritts.sh)
 
-To run the trainer you need to create experiment shell script `/AmphionVALLEv2/egs/tts/valle_gpt_simple/train_ar_libritts.sh`
+To run the trainer you need to create experiment shell script `/AmphionVALLEv2/egs/tts/valle_v2/train_ar_libritts.sh`
 
 **[TODO]: Set your experiment directory and work directory (fill the brackets with your own path)**
 
 ```bash
 ######## Build Experiment Environment ###########
-exp_dir="/[YourWorkspace]/AmphionVALLEv2/egs/tts/valle_gpt_simple"
+exp_dir="/[YourWorkspace]/AmphionVALLEv2/egs/tts/valle_v2"
 echo exp_dir
 work_dir="/[YourWorkspace]/AmphionVALLEv2/"
 echo work_dir
@@ -261,7 +271,7 @@ CUDA_VISIBLE_DEVICES=0 accelerate launch --main_process_port $port "${work_dir}"
 **[TODO]: Run the command to Train AR on `dev-clean` dataset**
 
 ```sh
-sh egs/tts/valle_gpt_simple/train_ar_libritts.sh
+sh egs/tts/valle_v2/train_ar_libritts.sh
 ```
 Hope your code is running🏃🏃🏃🏃🏃
 
@@ -278,7 +288,7 @@ phonemizer_zh = EspeakBackend('cmn', preserve_punctuation=False, with_stress=Fal
 
 # Run with Slurm 
 首先通过 `sinfo`指令查看空闲的节点，在下面指定节点时需要指定一个空闲的节点。
-首先将 `/nfsmnt/{yourname}/AmphionVALLEv2/egs/tts/valle_gpt_simple/train_ar_libritts.sh` 路径下的前八行改为这个样子：
+首先将 `/nfsmnt/{yourname}/AmphionVALLEv2/egs/tts/valle_v2/train_ar_libritts.sh` 路径下的前八行改为这个样子：
 ```
 #!/usr/bin/env bash
 #SBATCH --job-name=train-valle-ar            # Job name
@@ -330,14 +340,14 @@ EspeakBackend.set_library(_ESPEAK_LIBRARY)
 
 ## JSON Configuration
 
-修改 `/nfsmnt/{yourname}/AmphionVALLEv2/egs/tts/valle_gpt_simple/exp_ar_libritts.json` 文件：
+修改 `/nfsmnt/{yourname}/AmphionVALLEv2/egs/tts/valle_v2/exp_ar_libritts.json` 文件：
 
 - 将 13 行的 `numworker` 改为 `4`
 - 40 行的 `batchsize` 改为 `1`
 
 ## Modify Dataset Script
 
-修改 `/nfsmnt/{yourname}/AmphionVALLEv2/models/tts/valle_gpt_simple/libritts_dataset.py` 下的 87 行，从 `25` 改为 `10`：
+修改 `/nfsmnt/{yourname}/AmphionVALLEv2/models/tts/valle_v2/libritts_dataset.py` 下的 87 行，从 `25` 改为 `10`：
 
 ```python
 self.trans_cache = self.trans_cache[(self.trans_cache['Duration'] >= 3.0) & (self.trans_cache['Duration'] <= 10.0)]
@@ -347,12 +357,12 @@ You can save the above content as a `.md` file. If you need any further modifica
 
 ## Resume from the exist checkpoint
 
-在 `/nfsmnt/qiujunwen/AmphionVALLEv2/egs/tts/valle_gpt_simple/train_ar_libritts.sh` 文件里的最后面的train model 改为：
+在 `/nfsmnt/qiujunwen/AmphionVALLEv2/egs/tts/valle_v2/train_ar_libritts.sh` 文件里的最后面的train model 改为：
 ```
 echo "Experimental Name: $exp_name"
 CUDA_VISIBLE_DEVICES=0 accelerate launch --main_process_port $port "${work_dir}"/bins/tts/train.py --config $exp_config --exp_name $exp_name --log_level debug \
     --resume \
     --resume_type "resume" \
-    --resume_from_ckpt_path "/nfsmnt/qiujunwen/AmphionVALLEv2/ckpt/valle_gpt_simple/ar_libritts_dev_clean/checkpoint/epoch-0029_step-0092000_loss-0.348073"
+    --resume_from_ckpt_path "/nfsmnt/qiujunwen/AmphionVALLEv2/ckpt/valle_v2/ar_libritts_dev_clean/checkpoint/epoch-0029_step-0092000_loss-0.348073"
 ```
 ckpt_path 更改成你跑出来最后一个epoch的checkpoint文件夹路径。

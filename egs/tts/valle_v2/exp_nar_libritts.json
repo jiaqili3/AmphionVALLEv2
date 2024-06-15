@@ -1,6 +1,6 @@
 {
     "model_type": "valle_simple_nar",
-    "log_dir": "/mnt/workspace/lizhekai/AmphionVALLEv2/ckpt/valle_gpt_simple",
+    "log_dir": "/mnt/workspace/lizhekai/AmphionVALLEv2/ckpt/valle_v2",
     "train": {
         "gradient_accumulation_step": 1,
         "find_unused_parameters": true,
