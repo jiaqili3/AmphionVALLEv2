@@ -7,13 +7,13 @@
         "find_unused_parameters": false,
         "tracker": ["tensorboard"],
         "max_epoch": 1000,
-        "save_checkpoint_stride": [2000],
+        "save_checkpoint_stride": [500],
         "keep_last": [1],
         "run_eval": [true],
         "dataloader": {
-          "num_worker": 4,
-          "pin_memory": true,
-          "persistent_workers": true
+          "num_worker": 0,
+          "pin_memory": false,
+          "persistent_workers": false
         },
         "dataset": {
           "use_dynamic_batchsize": false,
@@ -38,7 +38,7 @@
     }, 
     "dataset": {
       "dataset_list":["train-clean-360"],
-      "data_dir": "/mntnfs/lee_data1/chenxi/data/LibriTTS-R/LibriTTS_R",
+      "data_dir": "/mntnfs/lee_data1/chenxi/data/LibriTTS-R/LibriTTS_R"  // You can also change to other splits like "dev-clean"
     },
     "model": {
       "phone_vocab_size": 300,

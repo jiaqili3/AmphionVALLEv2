@@ -57,6 +57,7 @@ This will invoke a test which overfits it to a single example.
 
 We have tested our training script on LibriTTS and LibriTTS-R.
 You could download LibriTTS-R at [this link](https://www.openslr.org/141/) and LibriTTS at [this link](https://www.openslr.org/60).
+The "train-clean-360" split is currently used by our configuration.
 You can test dataset.py by run `python -m models.tts.valle_v2.libritts_dataset`.
 
 For your reference, our unzipped dataset files has a file structure like this:
@@ -100,7 +101,7 @@ To train your model, you need to modify the `dataset` variable in the json confi
 Currently it's at line 40, you should modify the "data_dir" to your dataset's root directory.
 ```
     "dataset": {
-      "dataset_list":["train-clean-360"],
+      "dataset_list":["train-clean-360"], // You can also change to other splits like "dev-clean"
       "data_dir": "/path/to/your/LibriTTS_R",
     },
 ```

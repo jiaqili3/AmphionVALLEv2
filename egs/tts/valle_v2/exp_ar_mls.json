@@ -43,7 +43,7 @@
         "max_sentences": 64,
         "random_seed": 0
     }, 
-    "trans_exp": {
+    "dataset": {
       "dataset_list":["mls_train"],
       "cache_dir": "/mnt/petrelfs/hehaorui/data/exp_cache/vc/",
       "use_speaker": false,

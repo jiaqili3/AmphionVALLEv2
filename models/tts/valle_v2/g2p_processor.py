@@ -271,7 +271,7 @@ def preprocess_text(text):
     text = text.replace("i.e.", "that is")
     text = text.replace("i.e.", "that is")
     text = text.replace("etc.", "etc")
-    text = re.sub(f"([{PUNCS}])", r" \1 ", text)
+    text = re.sub(f"([{PUNCS}])", r" ", text) # remove punctuations for now
     text = re.sub(rf"\s+", r" ", text)
     return text
 
