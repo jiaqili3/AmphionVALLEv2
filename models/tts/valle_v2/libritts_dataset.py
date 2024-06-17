@@ -14,33 +14,19 @@ from torch.utils.data import Dataset
 import pandas as pd
 import time
 import io
-from multiprocessing import Pool, Lock
-NUM_WORKERS=32
-lock = Lock()
 SAMPLE_RATE=16000
-def get_duration(file_path):
-    duration = librosa.get_duration(path=file_path, sr=SAMPLE_RATE)
-    return file_path, duration
 # g2p
-from utils.g2p.g2p import phonemizer_g2p
-# lang2token ={
-#     'zh': "[ZH]", 
-#     'ja':"[JA]", 
-#     "en":"[EN]", 
-#     "fr":"[FR]",
-#     "kr": "[KR]",
-#     "de": "[DE]",
-# }
-# LANG2CODE = {
-#     'en': 655,
-#     'zh': 654,
-# }
+from .g2p_processor import G2pProcessor
+phonemizer_g2p = G2pProcessor()
+
 
 
 class VALLEDataset(Dataset):
     def __init__(self, args):
         print(f"Initializing VALLEDataset")
         self.dataset_list = args.dataset_list
+        
+        print(f'using sampling rate {SAMPLE_RATE}')
 
         # set dataframe clumn name
         book_col_name = ["ID", "Original_text", "Normalized_text", "Aligned_or_not", "Start_time", "End_time", "Signal_to_noise_ratio"]
@@ -53,13 +39,13 @@ class VALLEDataset(Dataset):
 
         ######## add data dir to dataset2dir ##########
         self.dataset2dir = {
-            'dev-clean' : '/mnt/workspace/lizhekai/data/LibriTTS/dev-clean',
-            'dev-other' : '/mnt/workspace/lizhekai/data/LibriTTS/dev-other',
-            'test-clean' : '/mnt/workspace/lizhekai/data/LibriTTS/test-clean',
-            'test-other' : '/mnt/workspace/lizhekai/data/LibriTTS/test-other',
-            'train-clean-100' : '/mnt/workspace/lizhekai/data/LibriTTS/train-clean-100',
-            'train-clean-360' : '/mnt/workspace/lizhekai/data/LibriTTS/train-clean-360',
-            'train-other-500' : '/mnt/workspace/lizhekai/data/LibriTTS/train-other-500',
+            'dev-clean' : f'{args.data_dir}/dev-clean',
+            'dev-other' : f'{args.data_dir}/dev-other',
+            'test-clean' : f'{args.data_dir}/test-clean',
+            'test-other' : f'{args.data_dir}/test-other',
+            'train-clean-100' : f'{args.data_dir}/train-clean-100',
+            'train-clean-360' : f'{args.data_dir}/train-clean-360',
+            'train-other-500' : f'{args.data_dir}/train-other-500',
         }
         
         ###### load metadata and transcripts #####
@@ -68,7 +54,6 @@ class VALLEDataset(Dataset):
             # get [book,transcripts,audio] files list
             self.book_files_list = self.get_metadata_files(self.dataset2dir[dataset_name])
             self.trans_files_list = self.get_trans_files(self.dataset2dir[dataset_name])
-
             
             ## create metadata_cache (book.tsv file is not filtered, some file is not exist, but contain Duration and Signal_to_noise_ratio)
             for book_path in self.book_files_list:
@@ -94,40 +79,11 @@ class VALLEDataset(Dataset):
         self.trans_cache = self.trans_cache[(self.trans_cache['Duration'] >= 3.0) & (self.trans_cache['Duration'] <= 15.0)]
         print(f"After filtering: {len(self.trans_cache)}")
 
-
-        # self.use_speaker = args.use_speaker
-        # self.use_noise = args.use_noise
-        # print(f"Using speaker: {self.use_speaker}, using noise: {self.use_noise}")
-
-        # self.dataset_list = dataset_list
-
-        # self.meta_data_cache = None
-
-        # self.transcripts = None
-        
-        
-        
-        # self.meta_data_cache = pd.read_csv()
-
-        # # set random_state to current time
-        # current_time = int(time.time())
-
-        # # filter_by_length: filter_out files with duration < 3.0 or > 25.0
-        # print(f"Filtering files with duration between 3.0 and 25.0 seconds")
-        # print(f"Before filtering: {len(self.meta_data_cache)}")
-        # self.meta_data_cache = self.meta_data_cache[(self.meta_data_cache['duration'] >= 3.0) & (self.meta_data_cache['duration'] <= 25.0)]
-        # print(f"After filtering: {len(self.meta_data_cache)}")
-        # # create speaker2speaker_id
-        # # self.speaker2id = self.create_speaker2id()
-        # self.all_num_frames = (self.meta_data_cache['duration']*SAMPLE_RATE).to_list()
-        # self.num_frame_sorted = np.array(sorted(self.all_num_frames))
-        # self.num_frame_indices = np.array(sorted(range(len(self.all_num_frames)), key=lambda k: self.all_num_frames[k]))
-            
     def get_metadata_files(self,directory):
         book_files = []
         for root, _, files in os.walk(directory):
             for file in files:
-                if file.endswith('.book.tsv'):
+                if file.endswith('.book.tsv') and file[0] != '.':
                     rel_path = os.path.join(root, file)
                     book_files.append(rel_path)
         return book_files
@@ -136,7 +92,7 @@ class VALLEDataset(Dataset):
         trans_files = []
         for root, _, files in os.walk(directory):
             for file in files:
-                if file.endswith('.trans.tsv'):
+                if file.endswith('.trans.tsv') and file[0] != '.':
                     rel_path = os.path.join(root, file)
                     trans_files.append(rel_path)
         return trans_files
@@ -268,8 +224,8 @@ def batch_by_size(
 
 def test():
     from utils.util import load_config
-    cfg = load_config('/mnt/workspace/lizhekai/AmphionVALLEv2/egs/tts/valle_v2/exp_ar_libritts.json')
-    dataset = VALLEDataset(cfg.trans_exp)
+    cfg = load_config('/home/lijiaqi/AmphionVALLEv2/egs/tts/valle_v2/exp_ar_libritts.json')
+    dataset = VALLEDataset(cfg.dataset)
     metadata_cache = dataset.metadata_cache
     trans_cache = dataset.trans_cache
     print(trans_cache.head(10))
