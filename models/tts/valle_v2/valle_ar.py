@@ -127,16 +127,20 @@ class ValleAR(nn.Module):
         # calcualte top1, top5, top10 accuracy
         logits = out.logits
         logits = logits[:, -target_ids.shape[1] :]
-        top1_acc = (logits.argmax(-1)[...,:-1] == target_ids[:, 1:])
-        top1_acc = (top1_acc * target_mask[...,:-1]).sum() / target_mask.sum()
+        top1_acc = logits.argmax(-1)[..., :-1] == target_ids[:, 1:]
+        top1_acc = (top1_acc * target_mask[..., :-1]).sum() / target_mask.sum()
 
         top5_acc = torch.topk(logits[..., :-1, :], 5, dim=-1)[1]
-        top5_acc = (top5_acc == target_ids[:, 1:].unsqueeze(-1))
-        top5_acc = (top5_acc * target_mask[...,:-1].unsqueeze(-1)).sum() / target_mask.sum()
+        top5_acc = top5_acc == target_ids[:, 1:].unsqueeze(-1)
+        top5_acc = (
+            top5_acc * target_mask[..., :-1].unsqueeze(-1)
+        ).sum() / target_mask.sum()
 
         top10_acc = torch.topk(logits[..., :-1, :], 10, dim=-1)[1]
-        top10_acc = (top10_acc == target_ids[:, 1:].unsqueeze(-1))
-        top10_acc = (top10_acc * target_mask[...,:-1].unsqueeze(-1)).sum() / target_mask.sum()
+        top10_acc = top10_acc == target_ids[:, 1:].unsqueeze(-1)
+        top10_acc = (
+            top10_acc * target_mask[..., :-1].unsqueeze(-1)
+        ).sum() / target_mask.sum()
 
         out.top1_acc = top1_acc
         out.top5_acc = top5_acc
@@ -155,12 +159,16 @@ class ValleAR(nn.Module):
         phone_ids = phone_ids * phone_mask
         phone_ids = F.pad(phone_ids, (0, 1), value=0) + phone_eos_id * F.pad(
             1 - phone_mask, (0, 1), value=1
-        ) # make pad token eos token, add eos token at the end
-        phone_mask = F.pad(phone_mask, (1, 0), value=1) # add eos mask
-        phone_ids = phone_ids * phone_mask + pad_token_id * (1 - phone_mask) # restore pad token ids
-        phone_ids = F.pad(phone_ids, (1, 0), value=phone_bos_id) # add bos token
-        phone_mask = F.pad(phone_mask, (1, 0), value=1) # add bos mask
-        phone_label = -100 * torch.ones_like(phone_ids) # loss for entire phone is not computed (passed to llama)
+        )  # make pad token eos token, add eos token at the end
+        phone_mask = F.pad(phone_mask, (1, 0), value=1)  # add eos mask
+        phone_ids = phone_ids * phone_mask + pad_token_id * (
+            1 - phone_mask
+        )  # restore pad token ids
+        phone_ids = F.pad(phone_ids, (1, 0), value=phone_bos_id)  # add bos token
+        phone_mask = F.pad(phone_mask, (1, 0), value=1)  # add bos mask
+        phone_label = -100 * torch.ones_like(
+            phone_ids
+        )  # loss for entire phone is not computed (passed to llama)
         return phone_ids, phone_mask, phone_label
 
     def add_target_eos_bos_label(
@@ -176,12 +184,14 @@ class ValleAR(nn.Module):
         target_ids = target_ids * target_mask + pad_token_id * (1 - target_mask)
         target_ids = F.pad(target_ids, (1, 0), value=target_bos_id)
         target_mask = F.pad(target_mask, (1, 0), value=1)
-        target_label = target_ids * target_mask + (-100) * (1 - target_mask) # loss for target is computed on unmasked tokens
+        target_label = target_ids * target_mask + (-100) * (
+            1 - target_mask
+        )  # loss for target is computed on unmasked tokens
         return target_ids, target_mask, target_label
 
     def sample_hf(
         self,
-        phone_ids, # the phones of prompt and target should be concatenated together
+        phone_ids,  # the phones of prompt and target should be concatenated together
         prompt_ids,
         inputs_embeds=None,
         max_length=2000,
@@ -209,7 +219,7 @@ class ValleAR(nn.Module):
             self.bos_target_id,
             self.pad_token_id,
         )
-        prompt_ids = prompt_ids[:, :-1] # remove end token. Make it continue mode
+        prompt_ids = prompt_ids[:, :-1]  # remove end token. Make it continue mode
 
         input_token_ids = torch.cat([phone_ids, prompt_ids], dim=-1)
 
@@ -250,15 +260,14 @@ class ValleAR(nn.Module):
 
         return gen_tokens
 
+
 def test():
     model = ValleAR()
 
-    phone_ids = torch.LongTensor([[1,2,3,4,5,0],
-                                  [1,2,3,4,5,6]])
-    phone_mask = torch.LongTensor([[1,1,1,0,0,0],
-                                   [1,1,1,0,0,0]])
-    target_ids = torch.LongTensor([765, 234, 123, 234, 123,599]).expand(2,-1)
-    target_mask = torch.LongTensor([1,1,1,1,0,0]).expand(2,-1)
+    phone_ids = torch.LongTensor([[1, 2, 3, 4, 5, 0], [1, 2, 3, 4, 5, 6]])
+    phone_mask = torch.LongTensor([[1, 1, 1, 0, 0, 0], [1, 1, 1, 0, 0, 0]])
+    target_ids = torch.LongTensor([765, 234, 123, 234, 123, 599]).expand(2, -1)
+    target_mask = torch.LongTensor([1, 1, 1, 1, 0, 0]).expand(2, -1)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -272,17 +281,18 @@ def test():
         )
         loss = out.loss
 
-        loss.backward()        
+        loss.backward()
 
         optimizer.step()
 
         print(f"iter={i}, {loss}.")
-    
-    phone_ids = torch.LongTensor([1,2,3]).reshape(1,-1)
-    target_ids = torch.LongTensor([765, 234]).reshape(1,-1)
+
+    phone_ids = torch.LongTensor([1, 2, 3]).reshape(1, -1)
+    target_ids = torch.LongTensor([765, 234]).reshape(1, -1)
     sampled = model.sample_hf(phone_ids, target_ids)
 
     breakpoint()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test()

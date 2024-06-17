@@ -271,7 +271,7 @@ def preprocess_text(text):
     text = text.replace("i.e.", "that is")
     text = text.replace("i.e.", "that is")
     text = text.replace("etc.", "etc")
-    text = re.sub(f"([{PUNCS}])", r" ", text) # remove punctuations for now
+    text = re.sub(f"([{PUNCS}])", r" ", text)  # remove punctuations for now
     text = re.sub(rf"\s+", r" ", text)
     return text
 
@@ -325,23 +325,28 @@ def test():
     phone_id = [PHPONE2ID[p] for p in phone_seq]
     print(phone_id)
 
-class G2pProcessor():
+
+class G2pProcessor:
     def __init__(self):
         self.g2p = G2p()
-    def __call__(self, txt, lang='en'):
+
+    def __call__(self, txt, lang="en"):
         return self.txt2phoneid(txt)
+
     def txt2phoneid(self, txt):
         txt_struct, txt = process(txt, self.g2p)
         phone_seq = [p for w in txt_struct for p in w[1]]
         phone_id = [PHPONE2ID[p] for p in phone_seq]
         return None, phone_id
+
     def phoneid2txt(self, phone_id):
         txt = []
         for i in phone_id:
             txt.append(PHONE_SET[i])
         return txt
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     g2p = G2pProcessor()
     txt = "This is a test sentence."
     phoneid = g2p.txt2phoneid(txt)[1]

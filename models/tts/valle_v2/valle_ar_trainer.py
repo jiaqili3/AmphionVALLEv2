@@ -14,7 +14,10 @@ from tqdm import tqdm
 import torch.nn as nn
 from .base_trainer import BaseTrainer
 
-def make_pad_mask(lengths: torch.Tensor, max_len: int = 0, left_pad=False) -> torch.Tensor:
+
+def make_pad_mask(
+    lengths: torch.Tensor, max_len: int = 0, left_pad=False
+) -> torch.Tensor:
     """
     Args:
       lengths:
@@ -53,36 +56,44 @@ class ValleARTrainer(BaseTrainer):
         super().__init__(args, cfg)
         if self.cfg.use_speechtokenizer:
             from models.codec.speechtokenizer.model import SpeechTokenizer
-            config_path = './ckpts/speechtokenizer_hubert_avg/config.json'
-            ckpt_path = './ckpts/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
-            assert os.path.isfile(config_path), f"codec model {config_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
-            assert os.path.isfile(ckpt_path), f"codec model {ckpt_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
-            self.codec_encoder = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
+
+            config_path = "./ckpts/speechtokenizer_hubert_avg/config.json"
+            ckpt_path = "./ckpts/speechtokenizer_hubert_avg/SpeechTokenizer.pt"
+            assert os.path.isfile(
+                config_path
+            ), f"codec model {config_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
+            assert os.path.isfile(
+                ckpt_path
+            ), f"codec model {ckpt_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
+            self.codec_encoder = SpeechTokenizer.load_from_checkpoint(
+                config_path, ckpt_path
+            )
             self.codec_encoder.eval()
             self.codec_encoder.to(self.accelerator.device)
-            print(f'Loaded SpeechTokenizer from {config_path} and {ckpt_path}')
+            print(f"Loaded SpeechTokenizer from {config_path} and {ckpt_path}")
         else:
             from encodec import EncodecModel
+
             with self.accelerator.main_process_first():
                 self.codec_encoder = EncodecModel.encodec_model_24khz()
                 self.codec_encoder.set_target_bandwidth(6.0)
                 self.codec_encoder.to(self.accelerator.device)
-                self.codec_decoder = None   
-                print('Loaded EncodecModel') 
+                self.codec_decoder = None
+                print("Loaded EncodecModel")
         self.top1_accuracies = []
         self.top5_accuracies = []
         self.top10_accuracies = []
-        
-        if hasattr(self.cfg, 'flatten_first_2_layers'):
+
+        if hasattr(self.cfg, "flatten_first_2_layers"):
             self.flatten_first_2_layers = self.cfg.flatten_first_2_layers
-            print('flattened:',self.flatten_first_2_layers)
+            print("flattened:", self.flatten_first_2_layers)
         else:
             self.flatten_first_2_layers = False
-            
-        if hasattr(self.cfg, 'num_prediction_heads'):
+
+        if hasattr(self.cfg, "num_prediction_heads"):
             self.num_prediction_heads = self.cfg.num_prediction_heads
-            print('num_prediction_heads:',self.num_prediction_heads)
-            
+            print("num_prediction_heads:", self.num_prediction_heads)
+
     def _accelerator_prepare(self):
         # if self.accelerator.is_main_process:
         #     breakpoint()
@@ -95,10 +106,15 @@ class ValleARTrainer(BaseTrainer):
             self.model,
             self.optimizer,
         )
+
     def _build_criterion(self):
-        pass # loss is directly returned from model
+        pass  # loss is directly returned from model
+
     def _build_scheduler(self):
-        from transformers import get_cosine_schedule_with_warmup, get_constant_schedule_with_warmup
+        from transformers import (
+            get_cosine_schedule_with_warmup,
+            get_constant_schedule_with_warmup,
+        )
 
         return get_cosine_schedule_with_warmup(
             self.optimizer,
@@ -106,9 +122,8 @@ class ValleARTrainer(BaseTrainer):
             num_training_steps=self.cfg.train.scheduler.total_steps,
         )
 
-
     def _build_model(self):
-        if hasattr(self.cfg.model, 'num_prediction_heads'):
+        if hasattr(self.cfg.model, "num_prediction_heads"):
             from .valle_ar_multihead import ValleAR
         else:
             from .valle_ar import ValleAR
@@ -116,12 +131,12 @@ class ValleARTrainer(BaseTrainer):
 
     def _train_step(self, batch):
         # inference codec
-        '''Returns: dict('speech', 'speech_len', 'phone_ids', 'phone_lens')
+        """Returns: dict('speech', 'speech_len', 'phone_ids', 'phone_lens')
         speech: [B, T]
         speech_len: [B]
         phone_ids: [B, T]
         phone_lens: [B]
-        '''
+        """
         device = self.accelerator.device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
@@ -129,11 +144,15 @@ class ValleARTrainer(BaseTrainer):
         with torch.no_grad():
             if self.cfg.use_speechtokenizer:
                 # Extract discrete codes from SpeechTokenizer
-                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
+                vq_id = self.codec_encoder.encode(
+                    batch["speech"].unsqueeze(1)
+                )  # [B,1,T] -> (n_q, B, T)
             else:
-                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
-            
+                vq_id = self.codec_encoder.encode(batch["speech"].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(
+                    0, 1
+                )
+
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//320]
@@ -141,24 +160,33 @@ class ValleARTrainer(BaseTrainer):
                 first_layer = vq_id[0]
                 second_layer = vq_id[1]
                 # flatten the first two layers
-                batch['speech'] = torch.stack([first_layer, second_layer], dim=-1).flatten(-2,-1)
-                batch['speech_len'] = batch['speech_len'] // 160
-            elif hasattr(self.cfg.model, 'num_prediction_heads'):
-                batch['speech'] = vq_id[:2] # first two layers
-                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+                batch["speech"] = torch.stack(
+                    [first_layer, second_layer], dim=-1
+                ).flatten(-2, -1)
+                batch["speech_len"] = batch["speech_len"] // 160
+            elif hasattr(self.cfg.model, "num_prediction_heads"):
+                batch["speech"] = vq_id[:2]  # first two layers
+                batch["speech_len"] = (
+                    batch["speech_len"] // 320
+                )  # our codec downsamples 320x
             else:
-                batch['speech'] = vq_id[0] # use first layer
-                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
-        assert batch['speech_len'].max() <= batch['speech'].shape[-1]
+                batch["speech"] = vq_id[0]  # use first layer
+                batch["speech_len"] = (
+                    batch["speech_len"] // 320
+                )  # our codec downsamples 320x
+        assert batch["speech_len"].max() <= batch["speech"].shape[-1]
 
-
-        phone_mask = 1 - make_pad_mask(batch['phone_lens'], max_len=batch['phone_ids'].size(1), left_pad=False).to(torch.long)
-        speech_mask = 1 - make_pad_mask(batch['speech_len'], max_len=batch['speech'].size(1)).to(torch.long)
+        phone_mask = 1 - make_pad_mask(
+            batch["phone_lens"], max_len=batch["phone_ids"].size(1), left_pad=False
+        ).to(torch.long)
+        speech_mask = 1 - make_pad_mask(
+            batch["speech_len"], max_len=batch["speech"].size(1)
+        ).to(torch.long)
 
         out = self.model(
-            phone_ids = batch['phone_ids'],
+            phone_ids=batch["phone_ids"],
             phone_mask=phone_mask,
-            target_ids = batch['speech'],
+            target_ids=batch["speech"],
             target_mask=speech_mask,
         )
         loss = out.loss
@@ -171,24 +199,28 @@ class ValleARTrainer(BaseTrainer):
         #     print(f'avgs: top1: {sum(self.top1_accuracies)/len(self.top1_accuracies)}, top5: {sum(self.top5_accuracies)/len(self.top5_accuracies)}, top10: {sum(self.top10_accuracies)/len(self.top10_accuracies)}')
         #     breakpoint()
         return loss
-    
+
     ##########add your own dataloader to the trainer#############
     def _build_dataloader(self):
         from torch.utils.data import ConcatDataset, DataLoader
-        if self.cfg.train.dataset.name == 'emilia':
+
+        if self.cfg.train.dataset.name == "emilia":
             from .emilia_dataset import EmiliaDataset as VALLEDataset
+
             train_dataset = VALLEDataset()
-        elif self.cfg.train.dataset.name == 'mls':
+        elif self.cfg.train.dataset.name == "mls":
             from .mls_dataset import VALLEDataset as VALLEDataset
+
             train_dataset = VALLEDataset(self.cfg.dataset, resample_to_24k=False)
-        elif self.cfg.train.dataset.name == 'libritts':
+        elif self.cfg.train.dataset.name == "libritts":
             from .libritts_dataset import VALLEDataset as VALLEDataset
+
             train_dataset = VALLEDataset(self.cfg.dataset)
 
         from .valle_collator import VALLECollator
         import numpy as np
 
-        print('length of train_dataset:', len(train_dataset))
+        print("length of train_dataset:", len(train_dataset))
 
         collator = VALLECollator()
 
@@ -196,6 +228,7 @@ class ValleARTrainer(BaseTrainer):
             if self.accelerator.is_main_process:
                 self.logger.info("Use Dynamic Batchsize......")
             from .mls_dataset import batch_by_size
+
             batch_sampler = batch_by_size(
                 train_dataset.num_frame_indices,
                 train_dataset.get_num_frames,
@@ -214,6 +247,7 @@ class ValleARTrainer(BaseTrainer):
                 if len(x) % self.accelerator.num_processes == 0
             ]
             from models.base.base_sampler import VariableSampler
+
             train_loader = DataLoader(
                 train_dataset,
                 collate_fn=collator,
@@ -225,7 +259,9 @@ class ValleARTrainer(BaseTrainer):
                 persistent_workers=self.cfg.train.dataloader.persistent_workers,
                 prefetch_factor=4,
             )
-            print(f'process {self.accelerator.local_process_index} has {len(batches)} batches')
+            print(
+                f"process {self.accelerator.local_process_index} has {len(batches)} batches"
+            )
             self.accelerator.wait_for_everyone()
 
         else:
@@ -243,18 +279,22 @@ class ValleARTrainer(BaseTrainer):
                 collate_fn=collator,
                 sampler=sampler,
             )
-            print(f'process {self.accelerator.local_process_index} has {len(train_loader)} batches')
+            print(
+                f"process {self.accelerator.local_process_index} has {len(train_loader)} batches"
+            )
 
         return train_loader, None
+
     def _test_step(self, batch):
         # inference codec
-        '''Returns: dict('speech', 'speech_len', 'phone_ids', 'phone_lens')
+        """Returns: dict('speech', 'speech_len', 'phone_ids', 'phone_lens')
         speech: [B, T]
         speech_len: [B]
         phone_ids: [B, T]
         phone_lens: [B]
-        '''
+        """
         import torchaudio
+
         device = self.accelerator.device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
@@ -262,10 +302,14 @@ class ValleARTrainer(BaseTrainer):
         with torch.no_grad():
             if self.cfg.use_speechtokenizer:
                 # Extract discrete codes from SpeechTokenizer
-                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1)) # [B,1,T] -> (n_q, B, T)
+                vq_id = self.codec_encoder.encode(
+                    batch["speech"].unsqueeze(1)
+                )  # [B,1,T] -> (n_q, B, T)
             else:
-                vq_id = self.codec_encoder.encode(batch['speech'].unsqueeze(1))
-                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(0,1)
+                vq_id = self.codec_encoder.encode(batch["speech"].unsqueeze(1))
+                vq_id = torch.cat([encoded[0] for encoded in vq_id], dim=-1).transpose(
+                    0, 1
+                )
             # recovered_audio = self.codec_decoder(vq_emb, vq=False)
             # torchaudio.save('a.wav', recovered_audio[0], 16000)
             # vq_id: [8, B, T//200]
@@ -278,30 +322,37 @@ class ValleARTrainer(BaseTrainer):
                 first_layer = vq_id[0]
                 second_layer = vq_id[1]
                 # flatten the first two layers
-                batch['speech'] = torch.stack([first_layer, second_layer], dim=-1).flatten(-2,-1)
-                batch['speech_len'] = batch['speech_len'] // 160
-            elif hasattr(self.cfg.model, 'num_prediction_heads'):
-                batch['speech'] = vq_id[:2] # first two layers
-                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
+                batch["speech"] = torch.stack(
+                    [first_layer, second_layer], dim=-1
+                ).flatten(-2, -1)
+                batch["speech_len"] = batch["speech_len"] // 160
+            elif hasattr(self.cfg.model, "num_prediction_heads"):
+                batch["speech"] = vq_id[:2]  # first two layers
+                batch["speech_len"] = (
+                    batch["speech_len"] // 320
+                )  # our codec downsamples 320x
             else:
-                batch['speech'] = vq_id[0] # use first layer
-                batch['speech_len'] = batch['speech_len'] // 320 # our codec downsamples 320x
-        
+                batch["speech"] = vq_id[0]  # use first layer
+                batch["speech_len"] = (
+                    batch["speech_len"] // 320
+                )  # our codec downsamples 320x
+
             # save gt
             breakpoint()
-            recovered_audio = self.codec_encoder.decode(vq_id[:1,:1])
+            recovered_audio = self.codec_encoder.decode(vq_id[:1, :1])
             # recovered_audio = self.codec_encoder.decode([(vq_id[:1].transpose(0,1), None)])
-            torchaudio.save('gt.wav', recovered_audio[0].cpu(), 16000)
-            out_vq_ids = self.model.sample_hf(batch['phone_ids'][:1, ...],batch['speech'][:1, :225],temperature=0.9)
+            torchaudio.save("gt.wav", recovered_audio[0].cpu(), 16000)
+            out_vq_ids = self.model.sample_hf(
+                batch["phone_ids"][:1, ...], batch["speech"][:1, :225], temperature=0.9
+            )
             # out_vq_ids = torch.cat([batch['speech'][:1, :225], out_vq_ids[:1, ...]], dim=1)
 
             # reconstruct form tokens
             recovered_audio = self.codec_encoder.decode(out_vq_ids.unsqueeze(0))
             # recovered_audio = self.codec_encoder.decode([(out_vq_ids, None)])
-            torchaudio.save('a.wav', recovered_audio[0].cpu(), 16000)
+            torchaudio.save("a.wav", recovered_audio[0].cpu(), 16000)
             breakpoint()
             print()
-
 
     @torch.inference_mode()
     def _valid_epoch(self):
@@ -313,6 +364,7 @@ class ValleARTrainer(BaseTrainer):
 
     def _inference(self):
         pass
+
     def test_loop(self):
         self.model.eval()
         for batch in self.train_dataloader:

@@ -5,55 +5,64 @@ Created on Wed Aug 30 15:47:55 2023
 """
 
 from .modules.seanet import SEANetEncoder, SEANetDecoder
-from .quantization  import ResidualVectorQuantizer
+from .quantization import ResidualVectorQuantizer
 import torch.nn as nn
 from einops import rearrange
 import torch
 import numpy as np
 
+
 class SpeechTokenizer(nn.Module):
     def __init__(self, config):
-        '''
-        
+        """
+
         Parameters
         ----------
         config : json
             Model Config.
 
-        '''
+        """
         super().__init__()
-        self.encoder = SEANetEncoder(n_filters=config.get('n_filters'), 
-                                     dimension=config.get('dimension'), 
-                                     ratios=config.get('strides'),
-                                     lstm=config.get('lstm_layers'),
-                                     bidirectional=config.get('bidirectional'),
-                                     dilation_base=config.get('dilation_base'),
-                                     residual_kernel_size=config.get('residual_kernel_size'),
-                                     n_residual_layers=config.get('n_residual_layers'),
-                                     activation=config.get('activation'))
-        self.sample_rate = config.get('sample_rate')
-        self.n_q = config.get('n_q')
-        self.downsample_rate = np.prod(config.get('strides'))
-        if config.get('dimension') != config.get('semantic_dimension'):
-            self.transform = nn.Linear(config.get('dimension'), config.get('semantic_dimension'))
+        self.encoder = SEANetEncoder(
+            n_filters=config.get("n_filters"),
+            dimension=config.get("dimension"),
+            ratios=config.get("strides"),
+            lstm=config.get("lstm_layers"),
+            bidirectional=config.get("bidirectional"),
+            dilation_base=config.get("dilation_base"),
+            residual_kernel_size=config.get("residual_kernel_size"),
+            n_residual_layers=config.get("n_residual_layers"),
+            activation=config.get("activation"),
+        )
+        self.sample_rate = config.get("sample_rate")
+        self.n_q = config.get("n_q")
+        self.downsample_rate = np.prod(config.get("strides"))
+        if config.get("dimension") != config.get("semantic_dimension"):
+            self.transform = nn.Linear(
+                config.get("dimension"), config.get("semantic_dimension")
+            )
         else:
             self.transform = nn.Identity()
-        self.quantizer = ResidualVectorQuantizer(dimension=config.get('dimension'), n_q=config.get('n_q'), bins=config.get('codebook_size'))
-        self.decoder = SEANetDecoder(n_filters=config.get('n_filters'), 
-                                     dimension=config.get('dimension'), 
-                                     ratios=config.get('strides'),
-                                     lstm=config.get('lstm_layers'),
-                                     bidirectional=False,
-                                     dilation_base=config.get('dilation_base'),
-                                     residual_kernel_size=config.get('residual_kernel_size'),
-                                     n_residual_layers=config.get('n_residual_layers'),
-                                     activation=config.get('activation'))
-        
+        self.quantizer = ResidualVectorQuantizer(
+            dimension=config.get("dimension"),
+            n_q=config.get("n_q"),
+            bins=config.get("codebook_size"),
+        )
+        self.decoder = SEANetDecoder(
+            n_filters=config.get("n_filters"),
+            dimension=config.get("dimension"),
+            ratios=config.get("strides"),
+            lstm=config.get("lstm_layers"),
+            bidirectional=False,
+            dilation_base=config.get("dilation_base"),
+            residual_kernel_size=config.get("residual_kernel_size"),
+            n_residual_layers=config.get("n_residual_layers"),
+            activation=config.get("activation"),
+        )
+
     @classmethod
-    def load_from_checkpoint(cls, 
-                             config_path: str, 
-                             ckpt_path: str):
-        '''
+    def load_from_checkpoint(cls, config_path: str, ckpt_path: str):
+        """
 
         Parameters
         ----------
@@ -67,22 +76,19 @@ class SpeechTokenizer(nn.Module):
         model : SpeechTokenizer
             SpeechTokenizer model.
 
-        '''
+        """
         import json
+
         with open(config_path) as f:
             cfg = json.load(f)
         model = cls(cfg)
-        params = torch.load(ckpt_path, map_location='cpu')
+        params = torch.load(ckpt_path, map_location="cpu")
         model.load_state_dict(params)
         return model
-    
-    
-    def forward(self, 
-                x: torch.tensor, 
-                n_q: int=None, 
-                layers: list=[0]):
-        '''
-        
+
+    def forward(self, x: torch.tensor, n_q: int = None, layers: list = [0]):
+        """
+
         Parameters
         ----------
         x : torch.tensor
@@ -101,19 +107,19 @@ class SpeechTokenizer(nn.Module):
         feature : torch.tensor
             Output of RVQ's first layer. Shape: (batch, timesteps, dimension)
 
-        '''
+        """
         n_q = n_q if n_q else self.n_q
         e = self.encoder(x)
-        quantized, codes, commit_loss, quantized_list = self.quantizer(e, n_q=n_q, layers=layers)
-        feature = rearrange(quantized_list[0], 'b d t -> b t d')
-        feature = self.transform(feature)       
+        quantized, codes, commit_loss, quantized_list = self.quantizer(
+            e, n_q=n_q, layers=layers
+        )
+        feature = rearrange(quantized_list[0], "b d t -> b t d")
+        feature = self.transform(feature)
         o = self.decoder(quantized)
         return o, commit_loss, feature
-    
-    def forward_feature(self, 
-                        x: torch.tensor, 
-                        layers: list=None):
-        '''
+
+    def forward_feature(self, x: torch.tensor, layers: list = None):
+        """
 
         Parameters
         ----------
@@ -127,17 +133,14 @@ class SpeechTokenizer(nn.Module):
         quantized_list : list[torch.tensor]
             Quantized of required layers.
 
-        '''
+        """
         e = self.encoder(x)
         layers = layers if layers else list(range(self.n_q))
         quantized, codes, commit_loss, quantized_list = self.quantizer(e, layers=layers)
         return quantized_list
-    
-    def encode(self, 
-               x: torch.tensor, 
-               n_q: int=None, 
-               st: int=None):
-        '''
+
+    def encode(self, x: torch.tensor, n_q: int = None, st: int = None):
+        """
 
         Parameters
         ----------
@@ -153,18 +156,16 @@ class SpeechTokenizer(nn.Module):
         codes : torch.tensor
             Output indices for each quantizer. Shape: (n_q, batch, timesteps)
 
-        '''
+        """
         e = self.encoder(x)
         if st is None:
             st = 0
         n_q = n_q if n_q else self.n_q
         codes = self.quantizer.encode(e, n_q=n_q, st=st)
         return codes
-    
-    def decode(self, 
-               codes: torch.tensor, 
-               st: int=0):
-        '''
+
+    def decode(self, codes: torch.tensor, st: int = 0):
+        """
 
         Parameters
         ----------
@@ -178,7 +179,7 @@ class SpeechTokenizer(nn.Module):
         o : torch.tensor
             Reconstruct wavs from codes. Shape: (batch, channels, timesteps)
 
-        '''
+        """
         quantized = self.quantizer.decode(codes, st=st)
         o = self.decoder(quantized)
         return o

@@ -23,27 +23,33 @@ from tqdm import tqdm
 from models.base.base_sampler import build_samplers
 from optimizer.optimizers import NoamLR
 
+
 class MainProcessLogger:
     def __init__(self, is_main_process=True, name=None, **kwargs):
         import logging
+
         if name is None:
             logger = logging.getLogger(__name__)
         else:
             logger = logging.getLogger(name)
         self.logger = logger
         self.is_main_process = is_main_process
+
     def info(self, msg):
         if self.is_main_process:
             print(msg)
             # self.logger.info(msg)
+
     def debug(self, msg):
         if self.is_main_process:
             print(msg)
             # self.logger.debug(msg)
+
     def warning(self, msg):
         if self.is_main_process:
             print(msg)
             # self.logger.warning(msg)
+
 
 class BaseTrainer(object):
     r"""The base trainer for all tasks. Any trainer should inherit from this class."""
@@ -62,7 +68,11 @@ class BaseTrainer(object):
 
         # Use accelerate logger for distributed training
         with self.accelerator.main_process_first():
-            self.logger = MainProcessLogger(self.accelerator.is_main_process, name=args.exp_name, log_level=args.log_level)
+            self.logger = MainProcessLogger(
+                self.accelerator.is_main_process,
+                name=args.exp_name,
+                log_level=args.log_level,
+            )
 
         # Log some info
         self.logger.info("=" * 56)
@@ -241,6 +251,7 @@ class BaseTrainer(object):
         implement ``_train_step`` and ``_valid_step`` separately.
         """
         pass
+
     def save_checkpoint(self):
         if self.accelerator.is_main_process:
             keep_last = self.keep_last[0]
@@ -250,7 +261,9 @@ class BaseTrainer(object):
             all_ckpts = list(all_ckpts)
             if len(all_ckpts) > keep_last:
                 # 只保留keep_last个的folder in self.checkpoint_dir, sort by step  "epoch-{:04d}_step-{:07d}_loss-{:.6f}"
-                all_ckpts = sorted(all_ckpts, key=lambda x: int(x.split("_")[1].split('-')[1]))
+                all_ckpts = sorted(
+                    all_ckpts, key=lambda x: int(x.split("_")[1].split("-")[1])
+                )
                 for ckpt in all_ckpts[:-keep_last]:
                     shutil.rmtree(os.path.join(self.checkpoint_dir, ckpt))
             checkpoint_filename = "epoch-{:04d}_step-{:07d}_loss-{:.6f}".format(
@@ -260,12 +273,12 @@ class BaseTrainer(object):
             self.logger.info("Saving state to {}...".format(path))
             self.accelerator.save_state(path)
             self.logger.info("Finished saving state.")
+
     @abstractmethod
     def _save_auxiliary_states(self):
         r"""To save some auxiliary states when saving model's ckpt"""
         pass
 
-    
     def echo_log(self, losses, mode="Training"):
         message = [
             "{} - Epoch {} Step {}: [{:.3f} s/step]".format(
@@ -342,10 +355,14 @@ class BaseTrainer(object):
         if it > self.cfg.train.scheduler.total_steps:
             return self.cfg.train.scheduler.min_lr
         # 3) in between, use cosine decay down to min learning rate
-        decay_ratio = (it - self.cfg.train.scheduler.warmup_steps) / (self.cfg.train.scheduler.total_steps - self.cfg.train.scheduler.warmup_steps)
+        decay_ratio = (it - self.cfg.train.scheduler.warmup_steps) / (
+            self.cfg.train.scheduler.total_steps - self.cfg.train.scheduler.warmup_steps
+        )
         assert 0 <= decay_ratio <= 1
-        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-        return self.cfg.train.scheduler.min_lr + coeff * (self.cfg.train.adamw.lr - self.cfg.train.scheduler.min_lr)
+        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
+        return self.cfg.train.scheduler.min_lr + coeff * (
+            self.cfg.train.adamw.lr - self.cfg.train.scheduler.min_lr
+        )
 
     ### Following are methods that can be used directly in child classes ###
     def _train_epoch(self):
@@ -384,12 +401,14 @@ class BaseTrainer(object):
             with self.accelerator.accumulate(self.model):
                 loss = self._train_step(batch)
                 self.current_loss = loss.item()
-                ema_loss = 0.99 * ema_loss + 0.01 * self.current_loss if ema_loss is not None else self.current_loss
+                ema_loss = (
+                    0.99 * ema_loss + 0.01 * self.current_loss
+                    if ema_loss is not None
+                    else self.current_loss
+                )
                 self.accelerator.backward(loss)
                 if self.accelerator.sync_gradients:
-                    self.accelerator.clip_grad_norm_(
-                        self.model.parameters(), 1.0
-                    )
+                    self.accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
                 self.optimizer.step()
                 self.optimizer.zero_grad()
             self.batch_count += 1
@@ -407,7 +426,7 @@ class BaseTrainer(object):
                             self.logger.info("Failed to save checkpoint, resuming...")
                 if self.accelerator.is_main_process:
                     if self.step % 100 == 0:
-                        self.logger.info(f'EMA Loss: {ema_loss:.6f}')
+                        self.logger.info(f"EMA Loss: {ema_loss:.6f}")
                 self.accelerator.log(
                     {
                         "Step/Train Loss": loss,
@@ -480,11 +499,17 @@ class BaseTrainer(object):
                 all_ckpts = filter(lambda x: x.startswith("epoch"), all_ckpts)
                 ls = list(all_ckpts)
                 ls = [os.path.join(checkpoint_dir, i) for i in ls]
-                ls.sort(key=lambda x: int(x.split("_")[-2].split("-")[-1]), reverse=True)
+                ls.sort(
+                    key=lambda x: int(x.split("_")[-2].split("-")[-1]), reverse=True
+                )
                 checkpoint_path = ls[0]
                 self.logger.info("Resume from {}".format(checkpoint_path))
             except Exception as e:
-                print("Failed to load checkpoint from {}, starting FROM SCRATCH...".format(checkpoint_dir))
+                print(
+                    "Failed to load checkpoint from {}, starting FROM SCRATCH...".format(
+                        checkpoint_dir
+                    )
+                )
                 return None
 
         if resume_type in ["resume", ""]:
@@ -728,7 +753,10 @@ class BaseTrainer(object):
             logging_dir=os.path.join(self.exp_dir, "log"),
         )
         from accelerate import DistributedDataParallelKwargs
-        kwargs = DistributedDataParallelKwargs(find_unused_parameters=self.cfg.train.find_unused_parameters)
+
+        kwargs = DistributedDataParallelKwargs(
+            find_unused_parameters=self.cfg.train.find_unused_parameters
+        )
 
         self.accelerator = accelerate.Accelerator(
             gradient_accumulation_steps=self.cfg.train.gradient_accumulation_step,
@@ -778,4 +806,5 @@ class BaseTrainer(object):
     @torch.inference_mode()
     def test_loop(self):
         pass
+
     ### Private methods end ###
