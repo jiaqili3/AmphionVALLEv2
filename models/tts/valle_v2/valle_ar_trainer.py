@@ -52,9 +52,11 @@ class ValleARTrainer(BaseTrainer):
     def __init__(self, args=None, cfg=None):
         super().__init__(args, cfg)
         if self.cfg.use_speechtokenizer:
-            from speechtokenizer import SpeechTokenizer
-            config_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/config.json'
-            ckpt_path = '/mnt/petrelfs/hehaorui/jiaqi/AmphionVALLEv2/SpeechTokenizer/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
+            from models.codec.speechtokenizer.model import SpeechTokenizer
+            config_path = './ckpts/speechtokenizer_hubert_avg/config.json'
+            ckpt_path = './ckpts/speechtokenizer_hubert_avg/SpeechTokenizer.pt'
+            assert os.path.isfile(config_path), f"codec model {config_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
+            assert os.path.isfile(ckpt_path), f"codec model {ckpt_path} not found! Download with huggingface-cli download fnlp/SpeechTokenizer speechtokenizer_hubert_avg/SpeechTokenizer.pt speechtokenizer_hubert_avg/config.json --local-dir ckpts"
             self.codec_encoder = SpeechTokenizer.load_from_checkpoint(config_path, ckpt_path)
             self.codec_encoder.eval()
             self.codec_encoder.to(self.accelerator.device)
@@ -178,10 +180,10 @@ class ValleARTrainer(BaseTrainer):
             train_dataset = VALLEDataset()
         elif self.cfg.train.dataset.name == 'mls':
             from .mls_dataset import VALLEDataset as VALLEDataset
-            train_dataset = VALLEDataset(self.cfg.trans_exp, resample_to_24k=False)
+            train_dataset = VALLEDataset(self.cfg.dataset, resample_to_24k=False)
         elif self.cfg.train.dataset.name == 'libritts':
             from .libritts_dataset import VALLEDataset as VALLEDataset
-            train_dataset = VALLEDataset(self.cfg.trans_exp)
+            train_dataset = VALLEDataset(self.cfg.dataset)
 
         from .valle_collator import VALLECollator
         import numpy as np

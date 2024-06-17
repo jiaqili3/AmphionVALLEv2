@@ -1,6 +1,7 @@
 {
     "model_type": "valle_simple_nar",
     "log_dir": "/mnt/workspace/lizhekai/AmphionVALLEv2/ckpt/valle_v2",
+    "use_speechtokenizer": true,
     "train": {
         "gradient_accumulation_step": 1,
         "find_unused_parameters": true,
@@ -41,7 +42,7 @@
         "max_sentences": 64,
         "random_seed": 0
     }, 
-    "trans_exp": {
+    "dataset": {
       "dataset_list":["dev-clean"],
       "cache_dir": "/mnt/workspace/lizhekai/data/exp_cache/tts/",
       "use_speaker": false,
