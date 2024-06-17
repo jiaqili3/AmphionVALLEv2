@@ -56,13 +56,15 @@ class VALLEDataset(Dataset):
             self.trans_files_list = self.get_trans_files(self.dataset2dir[dataset_name])
             
             ## create metadata_cache (book.tsv file is not filtered, some file is not exist, but contain Duration and Signal_to_noise_ratio)
-            for book_path in self.book_files_list:
+            print('reading paths for dataset...')
+            for book_path in tqdm(self.book_files_list):
                 tmp_cache = pd.read_csv(book_path, sep = '\t', names=book_col_name, quoting=3)
                 self.metadata_cache = pd.concat([self.metadata_cache, tmp_cache], ignore_index = True)
             self.metadata_cache.set_index('ID', inplace=True)
 
             ## create transcripts (the trans.tsv file)
-            for trans_path in self.trans_files_list:
+            print('creating transcripts for dataset...')
+            for trans_path in tqdm(self.trans_files_list):
                 tmp_cache = pd.read_csv(trans_path, sep = '\t', names=trans_col_name, quoting=3)
                 tmp_cache['Dir_path'] = os.path.dirname(trans_path)
                 self.trans_cache = pd.concat([self.trans_cache, tmp_cache], ignore_index = True)
