@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 30 15:47:55 2023
-@author: zhangxin
-"""
+# This code is from https://github.com/ZhangXInFD/SpeechTokenizer/blob/main/speechtokenizer/model.py
+# Licensed under Apache License 2.0
 
 from .modules.seanet import SEANetEncoder, SEANetDecoder
 from .quantization import ResidualVectorQuantizer
