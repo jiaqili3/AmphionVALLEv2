@@ -21,7 +21,7 @@
         },
         "optimizer": "adamw",
         "adamw": {
-          "lr": 3e-4
+          "lr": 1e-4
         },
         "scheduler": {
           "warmup_steps": 25000,

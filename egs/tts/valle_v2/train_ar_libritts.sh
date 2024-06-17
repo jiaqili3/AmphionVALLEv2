@@ -19,12 +19,9 @@ echo "Exprimental Configuration File: $exp_config"
 ######## Set the experiment name ##########
 exp_name="ar_libritts"
 
-port=53333
+port=53333 # a random number for port
 
 ######## Train Model ###########
 echo "Experiment Name: $exp_name"
 accelerate launch --main_process_port $port "${work_dir}"/bins/tts/train.py --config $exp_config \
 --exp_name $exp_name --log_level debug $1 
-    # --resume \
-
-# uncomment the "resume" part to automatically resume from the last-time checkpoint

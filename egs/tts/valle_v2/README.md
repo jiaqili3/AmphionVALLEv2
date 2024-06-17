@@ -122,6 +122,8 @@ Config `use_dynamic_dataset` is used to solve the problem of inconsistent sequen
         },
 ```
 
+We also recommend changing "num_hidden_layers" if your GPU memory is limited.
+
 **Set smaller batch_size if you are out of memory😢😢**
 
 I used batch_size=3 to successfully run on a single card, if you'r out of memory, try smaller.
@@ -140,7 +142,7 @@ Run:
 ```sh
 sh egs/tts/valle_v2/train_ar_libritts.sh
 ```
-Hope your code is running🏃🏃🏃🏃🏃
+Your model checkpoint could be found in `ckpt/valle_v2/ar_libritts/checkpoint/epoch-0000_step-0000000_loss-7.397293/pytorch_model.bin`
 
 
 ### Resume from existing checkpoint
@@ -162,3 +164,6 @@ sh egs/tts/valle_v2/train_nar_libritts.sh
 Since our inference script is already given, you can change the paths
 from our pretrained model to you newly trained models and do the inference.
 
+## Future plans
+- [ ] Support more languages
+- [ ] More are coming...

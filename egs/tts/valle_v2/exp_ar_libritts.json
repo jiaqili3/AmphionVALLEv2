@@ -11,9 +11,9 @@
         "keep_last": [1],
         "run_eval": [true],
         "dataloader": {
-          "num_worker": 0,
-          "pin_memory": false,
-          "persistent_workers": false
+          "num_worker": 4,
+          "pin_memory": true,
+          "persistent_workers": true
         },
         "dataset": {
           "use_dynamic_batchsize": false,

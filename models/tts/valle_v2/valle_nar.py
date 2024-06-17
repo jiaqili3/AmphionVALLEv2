@@ -118,7 +118,6 @@ class MultiEmbedding(nn.Module):
 class LlammaNARModel(LlamaModel):
     def __init__(self, config):
         '''Adding adaptive layer norm, conditional embeddings, and multi-level input embeddings to the decoder layer'''
-        breakpoint()
         super().__init__(config)
         self.layers = nn.ModuleList([LlamaNARDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaAdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size)
