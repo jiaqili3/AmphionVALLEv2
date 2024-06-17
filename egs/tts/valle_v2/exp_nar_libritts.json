@@ -38,7 +38,7 @@
     }, 
     "dataset": {
       "dataset_list":["train-clean-360"],
-      "data_dir": "/mntnfs/lee_data1/chenxi/data/LibriTTS-R/LibriTTS_R"  // You can also change to other splits like "dev-clean"
+      "data_dir": "/path/to/your/libritts"  // You can also change to other splits like "dev-clean"
     },
     "model": {
       "phone_vocab_size": 300,
